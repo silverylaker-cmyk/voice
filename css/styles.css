@@ -1,0 +1,195 @@
+:root {
+  --bg: #f4f6fb;
+  --card: #ffffff;
+  --primary: #5b8def;
+  --primary-d: #3f6fd1;
+  --text: #1f2733;
+  --muted: #7a8699;
+  --good: #2eb872;
+  --mild: #e9a23b;
+  --warn: #e0457b;
+  --radius: 16px;
+  --shadow: 0 2px 12px rgba(30, 50, 90, 0.08);
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR",
+    "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+main { max-width: 640px; margin: 0 auto; padding: 0 16px 24px; }
+
+.app-header {
+  text-align: center;
+  padding: 22px 16px 12px;
+  background: linear-gradient(135deg, #5b8def, #6f7cf0);
+  color: #fff;
+}
+.app-header h1 { margin: 0; font-size: 1.5rem; }
+.subtitle { margin: 4px 0 0; opacity: 0.92; font-size: 0.9rem; }
+
+/* 탭 */
+.tabs {
+  display: flex;
+  max-width: 640px;
+  margin: 0 auto;
+  background: #fff;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  box-shadow: var(--shadow);
+}
+.tab {
+  flex: 1;
+  border: none;
+  background: none;
+  padding: 12px 6px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.tab small { font-weight: 400; font-size: 0.72rem; opacity: 0.8; }
+.tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+/* 패널 */
+.panel { display: none; }
+.panel.active { display: block; }
+
+.guide {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  margin: 16px 0;
+  box-shadow: var(--shadow);
+}
+.guide h2 { margin: 0 0 8px; font-size: 1.1rem; }
+.guide p { margin: 0 0 10px; color: #45506180; color: #455061; font-size: 0.92rem; }
+.guide ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 0.88rem; }
+.guide li { margin: 3px 0; }
+.guide b { color: var(--text); }
+
+/* 녹음 컨트롤 */
+.recorder {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 20px;
+  text-align: center;
+  box-shadow: var(--shadow);
+  margin-bottom: 16px;
+}
+.level-meter {
+  height: 8px;
+  background: #e8edf6;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+.level-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #2eb872, #e9a23b, #e0457b);
+  transition: width 0.08s linear;
+}
+.timer {
+  font-size: 2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1px;
+}
+.record-btn {
+  margin: 12px auto 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 14px 30px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(91, 141, 239, 0.4);
+  transition: background 0.2s, transform 0.1s;
+}
+.record-btn:active { transform: scale(0.97); }
+.record-btn:disabled { background: #bcc6d6; box-shadow: none; }
+.record-btn .mic-dot {
+  width: 12px; height: 12px; border-radius: 50%; background: #fff;
+}
+.record-btn.recording { background: var(--warn); box-shadow: 0 4px 14px rgba(224, 69, 123, 0.4); }
+.record-btn.recording .mic-dot { animation: pulse 1s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+.status { margin-top: 6px; color: var(--muted); font-size: 0.9rem; min-height: 1.3em; }
+
+/* 결과 */
+.results { display: none; }
+.results.show { display: block; animation: fade 0.4s ease; }
+@keyframes fade { from { opacity: 0; transform: translateY(8px);} to { opacity: 1; transform: none; } }
+
+.summary {
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  margin-bottom: 14px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  color: #fff;
+}
+.summary.lv-good { background: linear-gradient(135deg, #2eb872, #36c99a); }
+.summary.lv-mild { background: linear-gradient(135deg, #e9a23b, #f0b95e); }
+.summary.lv-warn { background: linear-gradient(135deg, #e0457b, #ee6a92); }
+.summary-badge {
+  background: rgba(255,255,255,0.25);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+.summary-text { font-size: 0.94rem; }
+
+.card {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow);
+  border-left: 5px solid #d4dbe6;
+}
+.card.lv-good { border-left-color: var(--good); }
+.card.lv-mild { border-left-color: var(--mild); }
+.card.lv-warn { border-left-color: var(--warn); }
+
+.card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.card-key { font-weight: 700; font-size: 0.98rem; }
+.card-value { font-weight: 800; font-size: 1.15rem; color: var(--primary-d); white-space: nowrap; }
+.card-sub { color: var(--muted); font-size: 0.82rem; margin-top: 2px; }
+.card-desc { margin-top: 8px; font-size: 0.9rem; color: #455061; }
+
+.chart-card .card-key { display: block; margin-bottom: 10px; }
+.chart { display: block; width: 100%; }
+
+.app-footer {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 16px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.disclaimer { color: #b06; opacity: 0.85; margin-top: 6px; }

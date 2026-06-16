@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#5b8def" />
+  <title>음성 분석 — F0 · 지터 · 쉬머 · CPP</title>
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <link rel="stylesheet" href="./css/styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <h1>🎙️ 음성 분석</h1>
+    <p class="subtitle">내 목소리를 녹음하고 건강 지표를 확인하세요</p>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-mode="vowel">음성 검사<small>모음 /아/</small></button>
+    <button class="tab" data-mode="speech">발화 평가<small>일상 대화</small></button>
+  </nav>
+
+  <main>
+    <!-- 음성 검사 패널 -->
+    <section class="panel active" data-mode="vowel">
+      <div class="guide">
+        <h2>음성 검사 (F0 · 지터 · 쉬머)</h2>
+        <p>조용한 곳에서 휴대폰을 입에서 약 10cm 떨어뜨리고,
+        편안한 높이로 <b>"아~"</b> 소리를 <b>3~5초간 일정하게</b> 길게 내주세요.</p>
+        <ul>
+          <li><b>F0</b> — 목소리의 기본 높낮이</li>
+          <li><b>지터(Jitter)</b> — 주파수(주기) 떨림</li>
+          <li><b>쉬머(Shimmer)</b> — 진폭(세기) 떨림</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 발화 평가 패널 -->
+    <section class="panel" data-mode="speech">
+      <div class="guide">
+        <h2>발화 평가 (일상 대화 분석)</h2>
+        <p>평소처럼 <b>1~3분간 자연스럽게</b> 말씀해 주세요. (책 읽기·자기소개 등)
+        녹음 중 음높이가 잘 유지되는지 분석합니다. 최대 5분에서 자동 종료됩니다.</p>
+        <ul>
+          <li><b>SFF 분포</b> — 발화 기본 주파수의 분포도</li>
+          <li><b>CPP</b> — 켑스트럼 피크 돌출도(음질 지표)</li>
+          <li><b>음도 일탈</b> — 음높이 급변·발성 끊김 빈도</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 공통 녹음 컨트롤 -->
+    <div class="recorder">
+      <div class="level-meter"><div id="level-bar" class="level-bar"></div></div>
+      <div id="timer" class="timer">00:00</div>
+      <button id="record-btn" class="record-btn">
+        <span class="mic-dot"></span>
+        <span class="btn-label">녹음 시작</span>
+      </button>
+      <div id="status" class="status">대기 중</div>
+    </div>
+
+    <div id="results" class="results"></div>
+  </main>
+
+  <footer class="app-footer">
+    <p>모든 분석은 기기 내에서 처리되며, 음성은 서버로 전송되지 않습니다.</p>
+    <p class="disclaimer">⚠️ 본 결과는 참고용 정보이며 의학적 진단을 대체하지 않습니다.
+    증상이 지속되면 이비인후과·음성언어재활 전문가와 상담하세요.</p>
+  </footer>
+
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>
