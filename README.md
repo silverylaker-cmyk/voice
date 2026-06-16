@@ -24,6 +24,26 @@
 
 각 지표마다 정상 참고 범위 대비 등급(양호/경계/주의)과 쉬운 해설을 제공합니다.
 
+### 3) 후두 마사지 — Manual Circumlaryngeal Therapy (MCT)
+후두 주변 근육 긴장을 풀어 음성을 편하게 내도록 돕는 마사지 가이드입니다.
+- **설명 슬라이드**(준비→설골→갑상설골 공간→후두 하강→발성)와 **시연 영상**
+- 영상을 다시 보며 따라 한 뒤, **"검사 다시하기"** 로 세션1 검사를 재시행
+- **마사지 전·후 비교**: 수치 변화표 + 막대 비교 + 시간 추이 그래프
+- 마사지 후 편안한 음높이를 **세션4 바이오피드백 목표 F0**로 자동 저장
+- ※ 시연 영상은 `assets/mct-demo.mp4` 에 넣거나 화면에서 직접 파일을 불러옵니다.
+
+### 4) 실시간 시각적 바이오피드백 — Visual Biofeedback
+말하는 동안 현재 F0를 실시간 라인으로 보여주며 목표 음역대로 유도합니다.
+- 세션3에서 저장한 **마사지 후 F0**를 **녹색 타겟 박스**로 표시
+- 현재 음높이를 흐르는 **실시간 Line 그래프**로 표시(약간의 지연 허용)
+- **게임화**: 목표 적중률, 점수·콤보, 연속 유지/최고 기록, 실시간 격려 메시지
+
+### 5) 종단적 추적 대시보드 — Longitudinal Tracking
+검사 이력을 시간에 따라 추적합니다. **달력 / 주간** 모드 전환.
+- **달력 모드**: 일자별 F0 평균·CPP 수치와 마사지 수행 여부(💆) 기록
+- **주간 모드**: 최근 14일 F0·CPP·지터·쉬머를 **꺾은선 그래프**로 표시
+- 모든 기록은 기기 내 `localStorage`에 저장(브라우저별 로컬 보관)
+
 ## 분석 방법 (요약)
 
 | 항목 | 알고리즘 |
@@ -60,11 +80,17 @@ python3 -m http.server 8080
 ```
 index.html          앱 화면
 css/styles.css      스타일
-js/app.js           UI 제어 · 분석 파이프라인 연결
-js/recorder.js      Web Audio 마이크 녹음
+js/app.js           5개 세션 코디네이터 · 녹음/분석 파이프라인
+js/recorder.js      Web Audio 마이크 녹음(실시간 버퍼 콜백 포함)
 js/dsp.js           DSP: YIN, Jitter/Shimmer, CPP, Pitch Breaks
 js/fft.js           순수 JS FFT/IFFT
 js/explain.js       측정값 → 한국어 해설/등급
+js/charts.js        공용 Canvas 차트(히스토그램·컨투어·비교·꺾은선)
+js/store.js         localStorage 영속 저장(이력·타겟·마사지 기록)
+js/massage.js       세션3: 마사지 슬라이드·영상·전후 비교
+js/biofeedback.js   세션4: 실시간 F0 바이오피드백·게임화
+js/dashboard.js     세션5: 달력·주간 추적 대시보드
+assets/             세션3 시연 영상(mct-demo.mp4) 위치
 manifest.json, sw.js  PWA(설치·오프라인)
 icons/              앱 아이콘
 ```

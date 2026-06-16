@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="theme-color" content="#5b8def" />
-  <title>음성 분석 — F0 · 지터 · 쉬머 · CPP</title>
+  <title>음성 분석 — 검사 · 마사지 · 바이오피드백 · 추적</title>
   <link rel="manifest" href="./manifest.json" />
   <link rel="apple-touch-icon" href="./icons/icon-192.png" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -14,21 +14,24 @@
 <body>
   <header class="app-header">
     <h1>🎙️ 음성 분석</h1>
-    <p class="subtitle">내 목소리를 녹음하고 건강 지표를 확인하세요</p>
+    <p class="subtitle">검사 · 후두 마사지 · 실시간 피드백 · 추적</p>
   </header>
 
   <nav class="tabs">
-    <button class="tab active" data-mode="vowel">음성 검사<small>모음 /아/</small></button>
-    <button class="tab" data-mode="speech">발화 평가<small>일상 대화</small></button>
+    <button class="tab active" data-mode="vowel">검사<small>F0·지터·쉬머</small></button>
+    <button class="tab" data-mode="speech">발화<small>SFF·CPP</small></button>
+    <button class="tab" data-mode="massage">마사지<small>MCT</small></button>
+    <button class="tab" data-mode="biofeedback">피드백<small>실시간</small></button>
+    <button class="tab" data-mode="dashboard">추적<small>대시보드</small></button>
   </nav>
 
   <main>
-    <!-- 음성 검사 패널 -->
+    <!-- 세션1: 음성 검사 -->
     <section class="panel active" data-mode="vowel">
       <div class="guide">
-        <h2>음성 검사 (F0 · 지터 · 쉬머)</h2>
-        <p>조용한 곳에서 휴대폰을 입에서 약 10cm 떨어뜨리고,
-        편안한 높이로 <b>"아~"</b> 소리를 <b>3~5초간 일정하게</b> 길게 내주세요.</p>
+        <h2>① 음성 검사 (F0 · 지터 · 쉬머)</h2>
+        <p>조용한 곳에서 휴대폰을 입에서 약 10cm 떨어뜨리고, 편안한 높이로
+        <b>"아~"</b> 소리를 <b>3~5초간 일정하게</b> 길게 내주세요.</p>
         <ul>
           <li><b>F0</b> — 목소리의 기본 높낮이</li>
           <li><b>지터(Jitter)</b> — 주파수(주기) 떨림</li>
@@ -37,12 +40,12 @@
       </div>
     </section>
 
-    <!-- 발화 평가 패널 -->
+    <!-- 세션2: 발화 평가 -->
     <section class="panel" data-mode="speech">
       <div class="guide">
-        <h2>발화 평가 (일상 대화 분석)</h2>
-        <p>평소처럼 <b>1~3분간 자연스럽게</b> 말씀해 주세요. (책 읽기·자기소개 등)
-        녹음 중 음높이가 잘 유지되는지 분석합니다. 최대 5분에서 자동 종료됩니다.</p>
+        <h2>② 발화 평가 (일상 대화 분석)</h2>
+        <p>평소처럼 <b>1~3분간 자연스럽게</b> 말씀해 주세요. 음높이가 잘
+        유지되는지 분석합니다. 최대 5분에서 자동 종료됩니다.</p>
         <ul>
           <li><b>SFF 분포</b> — 발화 기본 주파수의 분포도</li>
           <li><b>CPP</b> — 켑스트럼 피크 돌출도(음질 지표)</li>
@@ -51,8 +54,18 @@
       </div>
     </section>
 
-    <!-- 공통 녹음 컨트롤 -->
-    <div class="recorder">
+    <!-- 세션3: 후두 마사지 (JS가 채움) -->
+    <section class="panel" data-mode="massage"></section>
+
+    <!-- 세션4: 실시간 바이오피드백 (JS가 채움) -->
+    <section class="panel" data-mode="biofeedback"></section>
+
+    <!-- 세션5: 추적 대시보드 (JS가 채움) -->
+    <section class="panel" data-mode="dashboard"></section>
+
+    <!-- 공통 녹음 컨트롤 (세션1·2·3 재검사에서 사용) -->
+    <div id="recorder-block" class="recorder">
+      <div id="record-guide" class="record-guide"></div>
       <div class="level-meter"><div id="level-bar" class="level-bar"></div></div>
       <div id="timer" class="timer">00:00</div>
       <button id="record-btn" class="record-btn">

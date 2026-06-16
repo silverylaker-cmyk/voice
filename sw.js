@@ -1,5 +1,5 @@
 // sw.js — 오프라인 지원용 서비스워커 (앱 셸 캐싱)
-const CACHE = 'voice-analysis-v1';
+const CACHE = 'voice-analysis-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -9,7 +9,14 @@ const ASSETS = [
   './js/fft.js',
   './js/recorder.js',
   './js/explain.js',
+  './js/charts.js',
+  './js/store.js',
+  './js/massage.js',
+  './js/biofeedback.js',
+  './js/dashboard.js',
   './manifest.json',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
 ];
 
 self.addEventListener('install', (e) => {

@@ -1,29 +1,104 @@
-// app.js — UI 제어 및 분석 파이프라인 연결
+// app.js — UI 제어 및 분석 파이프라인 연결 (5개 세션 코디네이터)
 import { Recorder } from './recorder.js';
-import {
-  resample, analyzeSustained, analyzeSpeech, ANALYSIS_SR,
-} from './dsp.js';
-import {
-  explainSustained, explainSpeech, LEVEL, formatDuration,
-} from './explain.js';
+import { resample, analyzeSustained, analyzeSpeech, ANALYSIS_SR } from './dsp.js';
+import { explainSustained, explainSpeech, LEVEL } from './explain.js';
+import { drawHistogram, drawContour, drawLineSeries, COL } from './charts.js';
+import * as store from './store.js';
+import { renderMassage } from './massage.js';
+import { renderBiofeedback, stopBiofeedback } from './biofeedback.js';
+import { renderDashboard } from './dashboard.js';
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
 let recorder = null;
-let currentMode = 'vowel'; // 'vowel' | 'speech'
+let currentMode = 'vowel';
 let autoStopTimer = null;
+
+// 현재 녹음 세션의 목적: { type:'vowel'|'speech', tag, onResult(result) }
+let testContext = null;
 
 const MIN_VOWEL_SEC = 3;
 const MIN_SPEECH_SEC = 30;
-const MAX_SPEECH_SEC = 300; // 5분 자동 종료
+const MAX_SPEECH_SEC = 300;
+
+const RECORDER_MODES = new Set(['vowel', 'speech']);
+
+// 세션3(마사지)에 전달할 API
+const massageApi = {
+  getLatestVowel: () => store.getLatest('vowel'),
+  addMassageDay: () => store.addMassageDay(),
+  setTarget: (t) => store.setTarget(t),
+  requestVowelRetest: (onResult) => beginRetest(onResult),
+  renderVowelTrend: (box) => renderVowelTrend(box),
+};
+const sessionApi = {
+  getTarget: () => store.getTarget(),
+  getLatestVowel: () => store.getLatest('vowel'),
+};
 
 // ---- 탭 전환 ----
 function switchTab(mode) {
+  // 진행 중 작업 정리
+  if (recorder && recorder.recording) { try { recorder.stop(); } catch (e) {} }
+  stopBiofeedback();
+  if (autoStopTimer) { clearTimeout(autoStopTimer); autoStopTimer = null; }
+  testContext = null;
+
   currentMode = mode;
   $$('.tab').forEach((t) => t.classList.toggle('active', t.dataset.mode === mode));
   $$('.panel').forEach((p) => p.classList.toggle('active', p.dataset.mode === mode));
+
+  // 공용 녹음 컨트롤/결과 표시 여부
+  const recBlock = $('#recorder-block');
+  if (RECORDER_MODES.has(mode)) {
+    recBlock.hidden = false;
+    setupStandardTest(mode);
+  } else {
+    recBlock.hidden = true;
+  }
+
   resetUI();
+
+  if (mode === 'massage') renderMassage($('.panel[data-mode="massage"]'), massageApi);
+  else if (mode === 'biofeedback') renderBiofeedback($('.panel[data-mode="biofeedback"]'), sessionApi);
+  else if (mode === 'dashboard') renderDashboard($('.panel[data-mode="dashboard"]'));
+}
+
+// 세션1·2 표준 검사 컨텍스트
+function setupStandardTest(mode) {
+  testContext = {
+    type: mode,
+    tag: null,
+    onResult: (result) => {
+      store.addRecord(mode, result, null);
+      if (mode === 'vowel') renderSustained(result);
+      else renderSpeech(result);
+    },
+  };
+  $('#record-btn .btn-label').textContent = '녹음 시작';
+  $('#record-guide').textContent = mode === 'vowel'
+    ? '"아~" 소리를 3~5초간 일정하게 길게 내주세요.'
+    : '평소처럼 1~3분간 자연스럽게 말씀해 주세요. (최대 5분)';
+}
+
+// 세션3에서 호출: 마사지 후 모음 재검사 시작
+function beginRetest(onResult) {
+  currentMode = 'vowel-retest';
+  const recBlock = $('#recorder-block');
+  recBlock.hidden = false;
+  testContext = {
+    type: 'vowel',
+    tag: 'after',
+    onResult: (result) => {
+      store.addRecord('vowel', result, 'after');
+      onResult(result);
+    },
+  };
+  $('#record-guide').textContent =
+    '마사지 후 검사입니다. 편안하게 "아~" 소리를 3~5초간 길게 내주세요.';
+  setStatus('마사지 후 검사 — 준비되면 녹음을 시작하세요.');
+  recBlock.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function resetUI() {
@@ -34,9 +109,7 @@ function resetUI() {
   $('#timer').textContent = '00:00';
 }
 
-function setStatus(text) {
-  $('#status').textContent = text;
-}
+function setStatus(text) { $('#status').textContent = text; }
 
 function fmtTimer(sec) {
   const m = String(Math.floor(sec / 60)).padStart(2, '0');
@@ -46,14 +119,17 @@ function fmtTimer(sec) {
 
 // ---- 녹음 시작/정지 ----
 async function startRecording() {
-  resetUI();
+  if (!testContext) return;
+  $('#results').innerHTML = '';
+  $('#results').classList.remove('show');
+  $('#timer').textContent = '00:00';
+
   recorder = new Recorder();
-  recorder.onLevel = (peak) => {
-    $('#level-bar').style.width = Math.min(100, peak * 140) + '%';
-  };
+  recorder.onLevel = (peak) => { $('#level-bar').style.width = Math.min(100, peak * 140) + '%'; };
+  const isSpeech = testContext.type === 'speech';
   recorder.onTime = (sec) => {
     $('#timer').textContent = fmtTimer(sec);
-    if (currentMode === 'speech') {
+    if (isSpeech) {
       const remain = Math.max(0, MAX_SPEECH_SEC - sec);
       setStatus(`녹음 중… (최대 5분, 남은 시간 ${fmtTimer(remain)})`);
     }
@@ -63,22 +139,16 @@ async function startRecording() {
     await recorder.start();
   } catch (err) {
     setStatus('마이크 접근 실패 — 브라우저 권한을 허용해 주세요.');
-    console.error(err);
     return;
   }
 
   $('#record-btn').classList.add('recording');
   $('#record-btn .btn-label').textContent = '정지';
-  setStatus(
-    currentMode === 'vowel'
-      ? '"아~" 소리를 편안하게 3~5초간 길게 내주세요.'
-      : '평소처럼 1~3분간 자연스럽게 말씀해 주세요.'
-  );
+  setStatus(isSpeech
+    ? '평소처럼 자연스럽게 말씀해 주세요.'
+    : '"아~" 소리를 편안하게 길게 내주세요.');
 
-  // 발화 모드: 최대 길이 자동 종료
-  if (currentMode === 'speech') {
-    autoStopTimer = setTimeout(() => stopRecording(), MAX_SPEECH_SEC * 1000);
-  }
+  if (isSpeech) autoStopTimer = setTimeout(() => stopRecording(), MAX_SPEECH_SEC * 1000);
 }
 
 async function stopRecording() {
@@ -87,7 +157,7 @@ async function stopRecording() {
 
   const result = recorder.stop();
   $('#record-btn').classList.remove('recording');
-  $('#record-btn .btn-label').textContent = currentMode === 'vowel' ? '녹음 시작' : '녹음 시작';
+  $('#record-btn .btn-label').textContent = '녹음 시작';
   $('#level-bar').style.width = '0%';
 
   if (!result || result.samples.length === 0) {
@@ -95,40 +165,25 @@ async function stopRecording() {
     return;
   }
 
+  const type = testContext.type;
   const durationSec = result.samples.length / result.sampleRate;
-  const minNeeded = currentMode === 'vowel' ? MIN_VOWEL_SEC : MIN_SPEECH_SEC;
+  const minNeeded = type === 'vowel' ? MIN_VOWEL_SEC : MIN_SPEECH_SEC;
   if (durationSec < minNeeded) {
-    setStatus(
-      `녹음이 너무 짧습니다 (${durationSec.toFixed(1)}초). ` +
-      `최소 ${minNeeded}초 이상 녹음해 주세요.`
-    );
+    setStatus(`녹음이 너무 짧습니다 (${durationSec.toFixed(1)}초). 최소 ${minNeeded}초 이상 녹음해 주세요.`);
     return;
   }
 
   setStatus('분석 중…');
-  // UI가 멈추지 않도록 다음 프레임에서 무거운 분석 수행
   await new Promise((r) => setTimeout(r, 30));
 
   try {
-    const mono = result.samples;
-    const ds = resample(mono, result.sampleRate, ANALYSIS_SR);
-
-    if (currentMode === 'vowel') {
-      const r = analyzeSustained(ds, ANALYSIS_SR);
-      if (!r.ok) {
-        setStatus(failReason(r.reason));
-        return;
-      }
-      renderSustained(r);
-    } else {
-      const r = analyzeSpeech(ds, ANALYSIS_SR);
-      if (!r.ok) {
-        setStatus(failReason(r.reason));
-        return;
-      }
-      renderSpeech(r);
-    }
+    const ds = resample(result.samples, result.sampleRate, ANALYSIS_SR);
+    const r = type === 'vowel'
+      ? analyzeSustained(ds, ANALYSIS_SR)
+      : analyzeSpeech(ds, ANALYSIS_SR);
+    if (!r.ok) { setStatus(failReason(r.reason)); return; }
     setStatus('분석 완료 ✓');
+    testContext.onResult(r);
   } catch (err) {
     console.error(err);
     setStatus('분석 중 오류가 발생했습니다. 다시 시도해 주세요.');
@@ -147,7 +202,7 @@ function failReason(reason) {
   }
 }
 
-// ---- 결과 렌더링 ----
+// ---- 결과 렌더링 (세션1·2) ----
 function levelClass(level) {
   return level === LEVEL.WARN ? 'lv-warn' : level === LEVEL.MILD ? 'lv-mild' : 'lv-good';
 }
@@ -158,14 +213,11 @@ function levelText(level) {
 function renderCards(parsed) {
   const box = $('#results');
   box.innerHTML = '';
-
-  // 종합 요약 배너
   const banner = document.createElement('div');
   banner.className = 'summary ' + levelClass(parsed.level);
   banner.innerHTML = `<div class="summary-badge">${levelText(parsed.level)}</div>
     <div class="summary-text">${parsed.summary}</div>`;
   box.appendChild(banner);
-
   for (const item of parsed.items) {
     const card = document.createElement('div');
     card.className = 'card ' + levelClass(item.level);
@@ -175,21 +227,17 @@ function renderCards(parsed) {
         <span class="card-value">${item.value}</span>
       </div>
       ${item.sub ? `<div class="card-sub">${item.sub}</div>` : ''}
-      <div class="card-desc">${item.desc}</div>
-    `;
+      <div class="card-desc">${item.desc}</div>`;
     box.appendChild(card);
   }
   box.classList.add('show');
   box.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-function renderSustained(r) {
-  renderCards(explainSustained(r));
-}
+function renderSustained(r) { renderCards(explainSustained(r)); }
 
 function renderSpeech(r) {
   renderCards(explainSpeech(r));
-  // SFF 히스토그램 + 컨투어 차트 삽입
   const chartBox = document.createElement('div');
   chartBox.className = 'card chart-card';
   chartBox.innerHTML = `<div class="card-key">SFF 분포 (음높이별 사용 빈도)</div>`;
@@ -217,127 +265,52 @@ function renderSpeech(r) {
   drawContour(cc, r.contour);
 }
 
-// ---- 차트 (Canvas) ----
-function setupCanvas(canvas, h = 180) {
-  const dpr = window.devicePixelRatio || 1;
-  const w = canvas.parentElement.clientWidth - 32;
-  canvas.style.width = w + 'px';
-  canvas.style.height = h + 'px';
-  canvas.width = w * dpr;
-  canvas.height = h * dpr;
-  const ctx = canvas.getContext('2d');
-  ctx.scale(dpr, dpr);
-  return { ctx, w, h };
-}
+// 세션3 비교에서 사용: 지금까지의 모음 검사 F0/Jitter 시간 추이
+function renderVowelTrend(box) {
+  const recs = store.getRecords().filter((r) => r.type === 'vowel');
+  if (recs.length < 2) return;
+  const card = document.createElement('div');
+  card.className = 'card chart-card';
+  card.innerHTML = `<div class="card-key">시간에 따른 변화 추이 (모음 검사)</div>`;
+  const cv = document.createElement('canvas');
+  cv.className = 'chart';
+  card.appendChild(cv);
+  const sub = document.createElement('div');
+  sub.className = 'card-sub';
+  sub.innerHTML = `<span style="color:${COL.blue}">●</span> F0(Hz)  ` +
+    `<span style="color:${COL.pink}">●</span> Jitter(%)  — 가장 최근 점이 마사지 후 결과입니다.`;
+  card.appendChild(sub);
+  box.appendChild(card);
 
-function drawHistogram(canvas, histogram, median) {
-  const { ctx, w, h } = setupCanvas(canvas);
-  const pad = { l: 8, r: 8, t: 10, b: 24 };
-  const plotW = w - pad.l - pad.r;
-  const plotH = h - pad.t - pad.b;
-  const maxCount = Math.max(1, ...histogram.map((b) => b.count));
-  const n = histogram.length;
-  const bw = plotW / n;
-
-  ctx.clearRect(0, 0, w, h);
-  // 막대
-  for (let i = 0; i < n; i++) {
-    const b = histogram[i];
-    const bh = (b.count / maxCount) * plotH;
-    const x = pad.l + i * bw;
-    const y = pad.t + (plotH - bh);
-    ctx.fillStyle = '#5b8def';
-    ctx.fillRect(x + 1, y, Math.max(1, bw - 2), bh);
-  }
-  // 중앙값 선
-  const first = histogram[0].from;
-  const last = histogram[histogram.length - 1].to;
-  const mx = pad.l + ((median - first) / (last - first)) * plotW;
-  ctx.strokeStyle = '#e0457b';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(mx, pad.t);
-  ctx.lineTo(mx, pad.t + plotH);
-  ctx.stroke();
-  ctx.fillStyle = '#e0457b';
-  ctx.font = '11px sans-serif';
-  ctx.fillText(`중앙값 ${median.toFixed(0)}Hz`, Math.min(mx + 4, w - 80), pad.t + 12);
-
-  // x축 라벨
-  ctx.fillStyle = '#888';
-  ctx.font = '10px sans-serif';
-  ctx.fillText(`${first}Hz`, pad.l, h - 8);
-  ctx.fillText(`${last}Hz`, w - 40, h - 8);
-}
-
-function drawContour(canvas, points) {
-  const { ctx, w, h } = setupCanvas(canvas);
-  const pad = { l: 34, r: 8, t: 10, b: 22 };
-  const plotW = w - pad.l - pad.r;
-  const plotH = h - pad.t - pad.b;
-
-  const valid = points.filter((p) => p.f0 != null);
-  if (!valid.length) return;
-  const tMax = points[points.length - 1].t || 1;
-  let fMin = Math.min(...valid.map((p) => p.f0));
-  let fMax = Math.max(...valid.map((p) => p.f0));
-  fMin = Math.floor((fMin - 10) / 10) * 10;
-  fMax = Math.ceil((fMax + 10) / 10) * 10;
-  if (fMax - fMin < 20) fMax = fMin + 20;
-
-  ctx.clearRect(0, 0, w, h);
-  // y축 눈금
-  ctx.strokeStyle = '#eee';
-  ctx.fillStyle = '#999';
-  ctx.font = '10px sans-serif';
-  ctx.lineWidth = 1;
-  for (let g = 0; g <= 3; g++) {
-    const val = fMin + ((fMax - fMin) * g) / 3;
-    const y = pad.t + plotH - (plotH * g) / 3;
-    ctx.beginPath();
-    ctx.moveTo(pad.l, y);
-    ctx.lineTo(w - pad.r, y);
-    ctx.stroke();
-    ctx.fillText(val.toFixed(0), 2, y + 3);
-  }
-
-  const xOf = (t) => pad.l + (t / tMax) * plotW;
-  const yOf = (f) => pad.t + plotH - ((f - fMin) / (fMax - fMin)) * plotH;
-
-  ctx.strokeStyle = '#5b8def';
-  ctx.lineWidth = 1.6;
-  ctx.beginPath();
-  let drawing = false;
-  for (const p of points) {
-    if (p.f0 == null) { drawing = false; continue; }
-    const x = xOf(p.t), y = yOf(p.f0);
-    if (!drawing) { ctx.moveTo(x, y); drawing = true; }
-    else ctx.lineTo(x, y);
-  }
-  ctx.stroke();
-
-  ctx.fillStyle = '#999';
-  ctx.fillText('0s', pad.l, h - 6);
-  ctx.fillText(`${tMax.toFixed(0)}s`, w - 24, h - 6);
+  const last = recs.slice(-8);
+  const labels = last.map((r) => {
+    const d = new Date(r.ts);
+    return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  }).map((l, i, arr) => (arr.length > 5 && i % 2 ? '' : l));
+  const f0Pts = last.map((r, i) => ({ x: i, y: r.f0 }));
+  const jitPts = last.map((r, i) => ({ x: i, y: r.jitter ?? null }));
+  requestAnimationFrame(() =>
+    drawLineSeries(cv, [
+      { label: 'F0', color: COL.blue, points: f0Pts },
+      { label: 'Jitter', color: COL.pink, points: jitPts },
+    ], labels));
 }
 
 // ---- 초기화 ----
 function init() {
-  $$('.tab').forEach((t) =>
-    t.addEventListener('click', () => switchTab(t.dataset.mode))
-  );
+  $$('.tab').forEach((t) => t.addEventListener('click', () => switchTab(t.dataset.mode)));
   $('#record-btn').addEventListener('click', () => {
     if (recorder && recorder.recording) stopRecording();
     else startRecording();
   });
 
-  // 마이크 지원 여부 확인
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     setStatus('이 브라우저는 마이크 녹음을 지원하지 않습니다.');
     $('#record-btn').disabled = true;
   }
 
-  // 서비스워커 등록 (오프라인 지원)
+  setupStandardTest('vowel');
+
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
   }

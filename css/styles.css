@@ -51,17 +51,18 @@ main { max-width: 640px; margin: 0 auto; padding: 0 16px 24px; }
   flex: 1;
   border: none;
   background: none;
-  padding: 12px 6px;
-  font-size: 1rem;
-  font-weight: 600;
+  padding: 10px 2px;
+  font-size: 0.86rem;
+  font-weight: 700;
   color: var(--muted);
   cursor: pointer;
   border-bottom: 3px solid transparent;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
+  min-width: 0;
 }
-.tab small { font-weight: 400; font-size: 0.72rem; opacity: 0.8; }
+.tab small { font-weight: 400; font-size: 0.6rem; opacity: 0.8; white-space: nowrap; }
 .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
 
 /* 패널 */
@@ -193,3 +194,121 @@ main { max-width: 640px; margin: 0 auto; padding: 0 16px 24px; }
   font-size: 0.78rem;
 }
 .disclaimer { color: #b06; opacity: 0.85; margin-top: 6px; }
+
+/* ===== 공용 녹음 가이드 ===== */
+.record-guide { font-size: 0.9rem; color: #455061; margin-bottom: 10px; min-height: 1.2em; }
+#recorder-block[hidden] { display: none; }
+
+/* ===== 버튼 공용 ===== */
+.btn-primary, .btn-secondary {
+  border: none; border-radius: 999px; padding: 12px 18px;
+  font-size: 0.95rem; font-weight: 700; cursor: pointer;
+}
+.btn-primary { background: var(--primary); color: #fff; box-shadow: 0 3px 10px rgba(91,141,239,.35); }
+.btn-secondary { background: #eef2fb; color: var(--primary-d); }
+.btn-primary:active, .btn-secondary:active { transform: scale(.97); }
+
+/* ===== 세션3: 슬라이드 ===== */
+.slide-card { padding: 14px 16px; }
+.slide-body { min-height: 200px; }
+.slide-illust { display: flex; justify-content: center; }
+.anat { width: 150px; height: 150px; }
+.slide-step { color: var(--primary); font-weight: 700; font-size: .78rem; }
+.slide-text h3 { margin: 4px 0 6px; font-size: 1.1rem; }
+.slide-text p { margin: 0 0 8px; font-size: .92rem; color: #455061; }
+.slide-tip {
+  background: #fff7ec; border-left: 3px solid var(--mild);
+  padding: 8px 10px; border-radius: 8px; font-size: .82rem; color: #8a5a18;
+}
+.slide-nav { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; }
+.slide-btn {
+  border: none; background: #eef2fb; color: var(--primary-d);
+  border-radius: 8px; padding: 8px 12px; font-weight: 700; cursor: pointer; font-size: .9rem;
+}
+.slide-dots { display: flex; gap: 6px; }
+.slide-dots .dot { width: 8px; height: 8px; border-radius: 50%; background: #d4dbe6; }
+.slide-dots .dot.on { background: var(--primary); }
+
+/* 시연 영상 */
+.mct-video { width: 100%; border-radius: 12px; background: #000; margin: 6px 0; }
+.video-fallback {
+  background: #f3f6fc; border: 1px dashed #c2cfe4; border-radius: 12px;
+  padding: 16px; text-align: center; font-size: .88rem; color: #556;
+}
+.file-btn {
+  display: inline-block; margin-top: 8px; background: var(--primary); color: #fff;
+  padding: 9px 16px; border-radius: 999px; font-weight: 700; cursor: pointer; font-size: .9rem;
+}
+
+/* 마사지 액션 */
+.massage-actions .action-row { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.massage-note {
+  margin-top: 10px; font-size: .82rem; color: #556; background: #f3f6fc;
+  border-radius: 8px; padding: 8px 10px;
+}
+
+/* 전·후 비교 표 */
+.cmp-table { margin-top: 6px; }
+.cmp-head, .cmp-row {
+  display: grid; grid-template-columns: 1.5fr 1fr 1.1fr 1.1fr;
+  gap: 4px; align-items: center; padding: 7px 2px;
+}
+.cmp-head { color: var(--muted); font-size: .76rem; border-bottom: 1px solid #eef; }
+.cmp-row { border-bottom: 1px solid #f3f5fa; font-size: .92rem; }
+.cmp-row span:first-child { font-weight: 600; }
+.cmp-row small { color: var(--muted); font-size: .7rem; margin-left: 1px; }
+.cmp-delta { font-weight: 700; font-size: .85rem; text-align: right; }
+.cmp-delta.down-good { color: var(--good); }
+.cmp-delta.up-bad { color: var(--pink, #e0457b); color: var(--warn); }
+.cmp-delta.flat { color: var(--muted); }
+
+/* ===== 세션4: 바이오피드백 ===== */
+.target-info .target-val { font-size: 1.5rem; font-weight: 800; color: var(--good); }
+.target-info .target-center { font-size: .85rem; color: var(--muted); font-weight: 500; margin-left: 6px; }
+.target-info small { font-size: .9rem; }
+
+.score-board {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px;
+}
+.score-item {
+  background: #fff; border-radius: 12px; padding: 10px 4px; text-align: center;
+  box-shadow: var(--shadow);
+}
+.score-num { font-size: 1.2rem; font-weight: 800; color: var(--primary-d); }
+.score-lab { font-size: .66rem; color: var(--muted); margin-top: 2px; }
+
+.live-wrap { position: relative; padding: 12px 16px; }
+.live-canvas { display: block; width: 100%; border-radius: 8px; }
+.live-readout {
+  position: absolute; top: 18px; right: 24px; background: rgba(255,255,255,.85);
+  border-radius: 8px; padding: 2px 8px; font-weight: 800; color: var(--good); font-size: 1.3rem;
+}
+.live-readout small { font-size: .7rem; color: var(--muted); font-weight: 500; }
+.bf-msg { text-align: center; font-weight: 700; color: var(--primary-d); min-height: 1.4em; margin: 4px 0 10px; }
+
+/* ===== 세션5: 대시보드 ===== */
+.mode-toggle { display: flex; gap: 8px; margin-bottom: 12px; }
+.mode-btn {
+  flex: 1; border: none; background: #eef2fb; color: var(--primary-d);
+  border-radius: 10px; padding: 10px; font-weight: 700; cursor: pointer; font-size: .95rem;
+}
+.mode-btn.on { background: var(--primary); color: #fff; }
+
+.cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.cal-title { font-weight: 700; font-size: 1.05rem; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.cal-dow { text-align: center; font-size: .72rem; color: var(--muted); padding: 4px 0; font-weight: 700; }
+.cal-cell {
+  background: #fff; border-radius: 8px; min-height: 56px; padding: 3px 2px;
+  box-shadow: var(--shadow); font-size: .62rem; overflow: hidden;
+}
+.cal-cell.empty { background: transparent; box-shadow: none; }
+.cal-cell.has { outline: 1.5px solid rgba(91,141,239,.3); }
+.cal-cell.today { outline: 2px solid var(--primary); }
+.cal-day { font-weight: 700; font-size: .72rem; color: #334; display: flex; justify-content: space-between; align-items: center; }
+.cal-massage { font-size: .7rem; }
+.cal-metric { line-height: 1.25; }
+.cal-metric.f0 { color: var(--primary-d); font-weight: 700; }
+.cal-metric.cpp { color: var(--good); }
+.cal-count { color: var(--muted); font-size: .56rem; }
+.cal-legend { margin-top: 10px; }

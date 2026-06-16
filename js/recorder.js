@@ -12,6 +12,8 @@ export class Recorder {
     this.sampleRate = 0;
     this.onLevel = null;   // 입력 레벨 콜백 (0~1)
     this.onTime = null;    // 경과 시간 콜백 (초)
+    this.onBuffer = null;  // 실시간 버퍼 콜백 (Float32Array, sampleRate)
+    this.keepChunks = true; // false면 메모리에 누적하지 않음(실시간 전용)
     this._startTime = 0;
     this._timer = null;
   }
@@ -45,7 +47,8 @@ export class Recorder {
     this.processor.onaudioprocess = (e) => {
       if (!this.recording) return;
       const input = e.inputBuffer.getChannelData(0);
-      this.chunks.push(new Float32Array(input));
+      if (this.keepChunks) this.chunks.push(new Float32Array(input));
+      if (this.onBuffer) this.onBuffer(input, this.sampleRate);
       if (this.onLevel) {
         let peak = 0;
         for (let i = 0; i < input.length; i++) {
