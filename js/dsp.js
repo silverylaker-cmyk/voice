@@ -182,43 +182,47 @@ export function analyzeSustained(signal, sr) {
   const meanF0 = mean(voicedF0);
   const sdF0 = std(voicedF0, meanF0);
 
-  // 2) 주기 마커(글로탈 펄스) 추출 — peak-picking 기반 point process
-  // 평균 주기를 기준으로 양의 피크를 탐색해 주기/진폭열을 만든다.
-  const periodSamples = sr / meanF0;
-  const marks = extractPeaks(signal, sr, meanF0);
+  // 2) 글로탈 펄스 마커 추출 — 피치 컨투어 유도 + 교차상관(cross-correlation) 보정
+  //    (Praat의 point-process(cc) 방식에 준한다: 이전 주기 파형과 가장 닮은 위치를 찾음)
+  const f0AtSample = (idx) => {
+    const f = Math.round((idx - contour.frameSize / 2) / contour.hop);
+    if (f >= 0 && f < contour.nFrames && contour.voiced[f] && contour.f0[f] > 0) {
+      return contour.f0[f];
+    }
+    return meanF0;
+  };
+  // 가장 긴 연속 유성 구간을 분석 대상으로 사용 (무성/잡음 구간 배제)
+  const vr = longestVoicedRange(contour);
+  const startIdx = vr ? vr[0] * contour.hop : 0;
+  const endIdx = vr
+    ? Math.min(signal.length, (vr[1] + 1) * contour.hop + contour.frameSize)
+    : signal.length;
 
+  const marks = pointProcess(signal, sr, f0AtSample, startIdx, endIdx);
   if (marks.length < 6) {
     return { ok: false, reason: 'cycles_too_few', meanF0 };
   }
 
-  // 3) 주기열과 진폭열
+  // 3) 주기열(초)과 진폭열 — 주기는 서브샘플 위치(pos)로 계산
   const periods = [];
-  const amps = [];
-  for (let i = 1; i < marks.length; i++) {
-    const T = (marks[i].idx - marks[i - 1].idx) / sr; // 초 단위 주기
-    periods.push(T);
-  }
-  for (let i = 0; i < marks.length; i++) amps.push(marks[i].amp);
+  for (let i = 1; i < marks.length; i++) periods.push((marks[i].pos - marks[i - 1].pos) / sr);
+  const amps = marks.map((m) => m.amp);
 
-  // 비정상적으로 벗어난 주기(연결 오류) 제거: 중앙값의 0.5~2배 범위만 사용
-  const medT = median(periods);
-  const cleanPeriods = periods.filter((t) => t > medT * 0.5 && t < medT * 2);
+  // 유효 주기 범위(초): F0 탐색 범위에 대응
+  const pFloor = 1 / F0_MAX, pCeil = 1 / F0_MIN;
 
-  // 4) Jitter
-  // local jitter (%) = 평균 |Ti - Ti-1| / 평균 T × 100
-  const jitterLocal = relativeMeanAbsDiff(cleanPeriods) * 100;
-  // ppq5: 5점 이동평균 기반 (보다 안정적)
-  const jitterPPQ5 = ppq(cleanPeriods, 5) * 100;
-  // absolute jitter (마이크로초)
-  const jitterAbs = meanAbsDiff(cleanPeriods) * 1e6;
+  // 4) Jitter — Praat식 제약: 범위 밖 주기 제외 + 연속 주기비 1.3 초과 쌍 제외
+  const jitterLocal = constrainedRelDiff(periods, pFloor, pCeil, MAX_PERIOD_FACTOR) * 100;
+  const jitterAbs = constrainedAbsDiff(periods, pFloor, pCeil, MAX_PERIOD_FACTOR) * 1e6;
+  const inRangePeriods = periods.filter((t) => t >= pFloor && t <= pCeil);
+  const jitterPPQ5 = ppq(inRangePeriods, 5) * 100;
 
-  // 5) Shimmer
-  // local shimmer (%) = 평균 |Ai - Ai-1| / 평균 A × 100
-  const shimmerLocal = relativeMeanAbsDiff(amps) * 100;
-  // dB shimmer = 평균 |20·log10(Ai/Ai-1)|
-  const shimmerDB = shimmerInDb(amps);
-  // apq5
+  // 5) Shimmer — Praat식 제약: 연속 진폭비 1.6 초과 쌍 제외
+  const shimmerLocal = constrainedRelDiff(amps, 0, Infinity, MAX_AMP_FACTOR) * 100;
+  const shimmerDB = constrainedShimmerDb(amps, MAX_AMP_FACTOR);
   const shimmerAPQ5 = ppq(amps, 5) * 100;
+
+  const cyclesUsed = inRangePeriods.length;
 
   return {
     ok: true,
@@ -226,7 +230,7 @@ export function analyzeSustained(signal, sr) {
     sdF0,
     minF0: Math.min(...voicedF0),
     maxF0: Math.max(...voicedF0),
-    cycles: cleanPeriods.length,
+    cycles: cyclesUsed,
     jitterLocal,
     jitterPPQ5,
     jitterAbs,
@@ -237,33 +241,143 @@ export function analyzeSustained(signal, sr) {
   };
 }
 
-// 평균 주기를 기준으로 양의 피크를 찾아 글로탈 펄스 후보를 만든다.
-function extractPeaks(signal, sr, meanF0) {
-  const period = Math.round(sr / meanF0);
-  const minDist = Math.round(period * 0.6); // 너무 가까운 피크 억제
-  const marks = [];
-  let i = 1;
-  const n = signal.length;
-  let lastIdx = -minDist;
-  while (i < n - 1) {
-    // 지역 최대
-    if (signal[i] > signal[i - 1] && signal[i] >= signal[i + 1] && signal[i] > 0) {
-      if (i - lastIdx >= minDist) {
-        // 주변에서 진짜 최대 위치 보정
-        let bestIdx = i, bestVal = signal[i];
-        const lo = Math.max(0, i - 2), hi = Math.min(n - 1, i + 2);
-        for (let j = lo; j <= hi; j++) {
-          if (signal[j] > bestVal) { bestVal = signal[j]; bestIdx = j; }
-        }
-        marks.push({ idx: bestIdx, amp: bestVal });
-        lastIdx = bestIdx;
-        i = bestIdx + minDist;
-        continue;
-      }
+// Praat point-process 제약 상수
+const MAX_PERIOD_FACTOR = 1.3; // 연속 주기비가 이를 넘으면 jitter 계산에서 제외
+const MAX_AMP_FACTOR = 1.6;    // 연속 진폭비가 이를 넘으면 shimmer 계산에서 제외
+
+// 가장 긴 연속 유성 구간 [startFrame, endFrame]
+function longestVoicedRange(contour) {
+  let best = null, bestLen = 0, s = -1;
+  for (let f = 0; f < contour.nFrames; f++) {
+    const v = contour.voiced[f];
+    if (v && s < 0) s = f;
+    if ((!v || f === contour.nFrames - 1) && s >= 0) {
+      const e = v ? f : f - 1;
+      if (e - s + 1 > bestLen) { bestLen = e - s + 1; best = [s, e]; }
+      s = -1;
     }
-    i++;
+  }
+  return best;
+}
+
+// [lo,hi) 구간에서 절대값이 최대인 표본 위치
+function argMaxAbs(signal, lo, hi) {
+  let bi = lo, bv = -1;
+  for (let i = lo; i < hi; i++) {
+    const v = Math.abs(signal[i]);
+    if (v > bv) { bv = v; bi = i; }
+  }
+  return bi;
+}
+
+// center 주변 ±halfWin 구간의 피크(절대값 최대) 진폭.
+// (피크 형태가 포물선이 아니어서 서브샘플 보간은 오히려 잡음을 키우므로 정수 최대 사용)
+function periodPeakAmp(signal, center, halfWin) {
+  const n = signal.length;
+  const lo = Math.max(0, center - halfWin);
+  const hi = Math.min(n - 1, center + halfWin);
+  let mv = 0;
+  for (let i = lo; i <= hi; i++) { const v = Math.abs(signal[i]); if (v > mv) mv = v; }
+  return mv;
+}
+
+// p 위치의 한 주기 윈도와 후보 c 위치를 정규화 교차상관으로 비교한다.
+// 정수 최적 위치 c와, 상관함수의 포물선 보간으로 구한 서브샘플 위치 pos를 반환.
+// (서브샘플 보간이 없으면 ±1샘플 양자화로 인한 지터 바닥이 생긴다.)
+function bestCCorr(signal, p, lo, hi, win) {
+  const half = Math.floor(win / 2);
+  const n = signal.length;
+  const corr = new Float64Array(hi - lo + 1);
+  let bestC = lo, bestR = -Infinity;
+  for (let c = lo; c <= hi; c++) {
+    let dot = 0, e1 = 0, e2 = 0;
+    for (let k = -half; k <= half; k++) {
+      const ia = p + k, ib = c + k;
+      const a = ia >= 0 && ia < n ? signal[ia] : 0;
+      const b = ib >= 0 && ib < n ? signal[ib] : 0;
+      dot += a * b; e1 += a * a; e2 += b * b;
+    }
+    const r = dot / (Math.sqrt(e1 * e2) + 1e-12);
+    corr[c - lo] = r;
+    if (r > bestR) { bestR = r; bestC = c; }
+  }
+  // 서브샘플 보간 (상관 최대 주변 3점 포물선)
+  let frac = 0;
+  const bi = bestC - lo;
+  if (bi > 0 && bi < corr.length - 1) {
+    const rm = corr[bi - 1], r0 = corr[bi], rp = corr[bi + 1];
+    const denom = rm - 2 * r0 + rp;
+    if (denom !== 0) {
+      frac = (0.5 * (rm - rp)) / denom;
+      if (frac > 1) frac = 1; else if (frac < -1) frac = -1;
+    }
+  }
+  return { c: bestC, pos: bestC + frac };
+}
+
+// 피치 컨투어로 예측한 주기를 교차상관으로 보정하며 글로탈 펄스 마커를 생성.
+// idx: 정수 위치(진폭 측정·다음 탐색 기준), pos: 서브샘플 위치(주기 계산)
+function pointProcess(signal, sr, f0AtSample, start, end) {
+  const marks = [];
+  const T0 = sr / f0AtSample(start);
+  let p = argMaxAbs(signal, start, Math.min(end, start + Math.round(T0)));
+  marks.push({ idx: p, pos: p, amp: periodPeakAmp(signal, p, Math.round(T0 / 4)) });
+
+  let guard = 0;
+  while (guard++ < 200000) {
+    const T = sr / f0AtSample(p);
+    const predicted = p + T;
+    if (predicted + T * 0.5 >= end) break;
+    const lo = Math.max(p + 2, Math.round(predicted - T * 0.35));
+    const hi = Math.min(end - 1, Math.round(predicted + T * 0.35));
+    if (hi <= lo) break;
+    const win = Math.max(8, Math.round(T * 0.8));
+    const { c, pos } = bestCCorr(signal, p, lo, hi, win);
+    if (c <= p) break;
+    marks.push({ idx: c, pos, amp: periodPeakAmp(signal, c, Math.round(T / 4)) });
+    p = c;
   }
   return marks;
+}
+
+// 범위 제약 + 비율 제약을 적용한 상대 평균 절대차 (jitter local / shimmer local)
+function constrainedRelDiff(vals, floor, ceil, maxFactor) {
+  let sumV = 0, nV = 0;
+  for (const v of vals) if (v >= floor && v <= ceil && v > 0) { sumV += v; nV++; }
+  if (nV === 0) return 0;
+  const meanV = sumV / nV;
+  let sumD = 0, nD = 0;
+  for (let i = 1; i < vals.length; i++) {
+    const a = vals[i - 1], b = vals[i];
+    if (a < floor || a > ceil || b < floor || b > ceil || a <= 0 || b <= 0) continue;
+    if (Math.max(a, b) / Math.min(a, b) > maxFactor) continue;
+    sumD += Math.abs(b - a); nD++;
+  }
+  return nD ? (sumD / nD) / meanV : 0;
+}
+
+// 범위/비율 제약을 적용한 절대 평균 차 (jitter absolute, 초 단위)
+function constrainedAbsDiff(vals, floor, ceil, maxFactor) {
+  let sumD = 0, nD = 0;
+  for (let i = 1; i < vals.length; i++) {
+    const a = vals[i - 1], b = vals[i];
+    if (a < floor || a > ceil || b < floor || b > ceil) continue;
+    if (Math.max(a, b) / Math.min(a, b) > maxFactor) continue;
+    sumD += Math.abs(b - a); nD++;
+  }
+  return nD ? sumD / nD : 0;
+}
+
+// 진폭비 제약을 적용한 dB shimmer
+function constrainedShimmerDb(amps, maxFactor) {
+  let sumD = 0, nD = 0;
+  for (let i = 1; i < amps.length; i++) {
+    const a = amps[i - 1], b = amps[i];
+    if (a <= 0 || b <= 0) continue;
+    if (Math.max(a, b) / Math.min(a, b) > maxFactor) continue;
+    sumD += Math.abs(20 * Math.log10(b / a)); nD++;
+  }
+  return nD ? sumD / nD : 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -494,17 +608,6 @@ function median(a) {
   const mid = Math.floor(b.length / 2);
   return b.length % 2 ? b[mid] : (b[mid - 1] + b[mid]) / 2;
 }
-function meanAbsDiff(a) {
-  if (a.length < 2) return 0;
-  let s = 0;
-  for (let i = 1; i < a.length; i++) s += Math.abs(a[i] - a[i - 1]);
-  return s / (a.length - 1);
-}
-function relativeMeanAbsDiff(a) {
-  const m = mean(a);
-  if (m === 0) return 0;
-  return meanAbsDiff(a) / m;
-}
 // PPQ/APQ: k점 이동평균 대비 변동
 function ppq(a, k) {
   if (a.length < k) return 0;
@@ -520,15 +623,4 @@ function ppq(a, k) {
     cnt++;
   }
   return cnt ? (s / cnt) / m : 0;
-}
-function shimmerInDb(a) {
-  if (a.length < 2) return 0;
-  let s = 0, cnt = 0;
-  for (let i = 1; i < a.length; i++) {
-    if (a[i] > 0 && a[i - 1] > 0) {
-      s += Math.abs(20 * Math.log10(a[i] / a[i - 1]));
-      cnt++;
-    }
-  }
-  return cnt ? s / cnt : 0;
 }

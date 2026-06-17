@@ -34,7 +34,7 @@ export function renderBiofeedback(panel, api) {
     const card = document.createElement('div');
     card.className = 'card lv-mild';
     if (latest) {
-      const semis = 1.5;
+      const semis = 2;
       target = {
         meanF0: latest.f0,
         lowF0: latest.f0 * Math.pow(2, -semis / 12),
@@ -49,7 +49,7 @@ export function renderBiofeedback(panel, api) {
       card.innerHTML = `<div class="card-key">목표 음역대가 없습니다</div>
         <div class="card-desc">먼저 <b>세션1</b> 또는 <b>세션3(후두 마사지)</b>을 진행해
         목표 F0를 설정해 주세요. 우선 기본값(180Hz)으로 연습할 수 있습니다.</div>`;
-      target = { meanF0: 180, lowF0: 165, highF0: 196, fallback: true };
+      target = { meanF0: 180, lowF0: 160, highF0: 202, fallback: true };
     }
     panel.appendChild(card);
   }

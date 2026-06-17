@@ -199,7 +199,7 @@ export function renderComparison(panel, before, after, api) {
   box.classList.add('show');
 
   // 타겟 F0 저장 (세션4 바이오피드백 가이드로 사용)
-  const semis = 1.5;
+  const semis = 2;
   const lowF0 = after.meanF0 * Math.pow(2, -semis / 12);
   const highF0 = after.meanF0 * Math.pow(2, semis / 12);
   api.setTarget({ meanF0: after.meanF0, lowF0, highF0 });
