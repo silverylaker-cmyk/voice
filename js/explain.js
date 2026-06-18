@@ -65,6 +65,25 @@ export function explainSustained(r) {
         : '진폭 변동이 큰 편입니다. 쉰 목소리·바람 새는 느낌과 관련될 수 있습니다.'),
   });
 
+  // CPPS — 지속 모음의 음질 지표 (모음은 대략 ≥9 양호, <6 주의)
+  if (r.meanCPPS != null) {
+    const cLevel = r.meanCPPS >= 9 ? LEVEL.GOOD : r.meanCPPS >= 6 ? LEVEL.MILD : LEVEL.WARN;
+    items.push({
+      key: 'CPPS (평활 켑스트럼 피크 돌출도)',
+      value: `${r.meanCPPS.toFixed(2)} dB`,
+      sub: `변동 ±${(r.sdCPPS ?? 0).toFixed(2)} dB`,
+      level: cLevel,
+      desc:
+        '모음 발성의 주기성이 얼마나 뚜렷한지를 나타내는 음질 지표입니다. ' +
+        '값이 높을수록 맑고 또렷하며, 낮을수록 쉰·바람 새는 음성에 가깝습니다. ' +
+        (cLevel === LEVEL.GOOD
+          ? '뚜렷하고 건강한 음질입니다.'
+          : cLevel === LEVEL.MILD
+          ? '보통 수준의 음질입니다.'
+          : '음질 저하 가능성이 있습니다.'),
+    });
+  }
+
   // 종합
   const worst = items
     .map((i) => i.level)
@@ -100,17 +119,17 @@ export function explainSpeech(r) {
         : '억양 변화가 큰 편입니다.'),
   });
 
-  // CPP — 정상 발화는 대략 ≥ 4~7dB (낮을수록 음질 저하/잡음 많음)
-  if (r.meanCPP != null) {
-    const cLevel = r.meanCPP >= 7 ? LEVEL.GOOD : r.meanCPP >= 4 ? LEVEL.MILD : LEVEL.WARN;
+  // CPPS — 평활 켑스트럼 피크 돌출도 (발화: 대략 ≥7 양호, <4 주의)
+  if (r.meanCPPS != null) {
+    const cLevel = r.meanCPPS >= 7 ? LEVEL.GOOD : r.meanCPPS >= 4 ? LEVEL.MILD : LEVEL.WARN;
     items.push({
-      key: 'CPP (켑스트럼 피크 돌출도)',
-      value: `${r.meanCPP.toFixed(2)} dB`,
-      sub: `변동 ±${(r.sdCPP ?? 0).toFixed(2)} dB`,
+      key: 'CPPS (평활 켑스트럼 피크 돌출도)',
+      value: `${r.meanCPPS.toFixed(2)} dB`,
+      sub: `변동 ±${(r.sdCPPS ?? 0).toFixed(2)} dB`,
       level: cLevel,
       desc:
-        '목소리의 주기성이 얼마나 뚜렷한지를 나타내는, 음질을 잘 반영하는 지표입니다. ' +
-        '값이 높을수록 맑고 또렷한 음성이며, 낮을수록 쉰 목소리·바람 새는 음성에 가깝습니다. ' +
+        '목소리의 주기성이 얼마나 뚜렷한지를 나타내는, 전반적 음질을 가장 잘 반영하는 지표입니다 ' +
+        '(시간·quefrency로 평활한 CPPS). 값이 높을수록 맑고 또렷하며, 낮을수록 쉰 목소리·바람 새는 음성에 가깝습니다. ' +
         (cLevel === LEVEL.GOOD
           ? '뚜렷하고 건강한 음질을 보입니다.'
           : cLevel === LEVEL.MILD
@@ -168,4 +187,42 @@ export function formatDuration(sec) {
   const m = Math.floor(sec / 60);
   const s = Math.round(sec % 60);
   return m > 0 ? `${m}분 ${s}초` : `${s}초`;
+}
+
+// ---- 종합 해석: 세션1 지터 × 세션2 CPPS ----
+// 지터(짧은 구간 주파수 떨림)와 CPPS(전반적 음질·주기성)는 서로 보완적이어서
+// 두 축으로 함께 보면 음성 상태를 더 정확히 분류할 수 있다.
+export function explainCombined(jitterPct, cppsDb) {
+  const jitterHigh = jitterPct > 1.04;   // 지터 정상 상한
+  const cppsLow = cppsDb < 7;            // 발화 CPPS 양호 기준
+  const cppsVeryLow = cppsDb < 4;
+
+  let level, headline, advice;
+  if (!jitterHigh && !cppsLow) {
+    level = LEVEL.GOOD;
+    headline = '주기 안정성(지터)과 전반 음질(CPPS)이 모두 양호합니다.';
+    advice = '현재 음성 상태가 건강한 편입니다. 좋은 발성 습관을 유지하세요.';
+  } else if (jitterHigh && !cppsLow) {
+    level = LEVEL.MILD;
+    headline = '전반 음질(CPPS)은 양호하나, 짧은 구간의 주파수 떨림(지터)이 큽니다.';
+    advice = '일시적 피로·긴장·건조에서 잘 나타납니다. 수분 섭취·음성 휴식 후 재측정을 권합니다.';
+  } else if (!jitterHigh && cppsLow) {
+    level = cppsVeryLow ? LEVEL.WARN : LEVEL.MILD;
+    headline = '주기는 비교적 규칙적이나, 전반 음질(CPPS)이 낮습니다.';
+    advice = 'CPPS는 전반적 음질을 잘 반영하는 지표로, 낮으면 기식성(바람 새는)·잡음 섞인 음성일 수 있습니다. 지속되면 전문가 평가를 권합니다.';
+  } else {
+    level = LEVEL.WARN;
+    headline = '주기 불안정(지터↑)과 음질 저하(CPPS↓)가 함께 나타납니다.';
+    advice = '음성 부담이 큰 패턴입니다. 음성 휴식과 함께 이비인후과·음성언어재활 전문가 상담을 권합니다.';
+  }
+
+  return {
+    key: '종합 해석 (지터 × CPPS)',
+    value: `지터 ${jitterPct.toFixed(2)}% · CPPS ${cppsDb.toFixed(1)}dB`,
+    sub: '세션1 지터 × 세션2 CPPS 조합',
+    level,
+    desc:
+      '지터는 짧은 구간의 "주파수 떨림", CPPS는 "전반적 음질·주기성"을 나타내는 보완적 지표입니다. ' +
+      '함께 보면 음성 상태를 더 정확히 파악할 수 있습니다. ' + headline + ' ' + advice,
+  };
 }

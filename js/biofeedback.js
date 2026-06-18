@@ -3,7 +3,7 @@
 // 세션3(마사지 후)에서 저장한 타겟 F0 음역대(녹색 박스)에 맞추도록 유도. 게임화 포함.
 
 import { Recorder } from './recorder.js';
-import { resample, yinPitch, ANALYSIS_SR } from './dsp.js';
+import { yinPitch, F0_MIN, F0_MAX } from './dsp.js';
 
 const WINDOW_SEC = 12; // 화면에 보이는 시간 폭
 
@@ -15,6 +15,8 @@ let target = null;
 let stats = null;
 let canvas = null, cvWrap = null;
 let running = false;
+let rawWindow = [];     // 최근 raw F0(중앙값 필터용)
+let smoothedF0 = null;  // EMA 평활값
 
 export function renderBiofeedback(panel, api) {
   stopBiofeedback();
@@ -136,6 +138,29 @@ function resetStats() {
     score: 0, voicedFrames: 0, inTargetFrames: 0,
     streakStart: null, bestStreak: 0, combo: 0, lastVoiced: false,
   };
+  rawWindow = [];
+  smoothedF0 = null;
+}
+
+// 작은 배열 중앙값
+function median(arr) {
+  if (!arr.length) return 0;
+  const b = [...arr].sort((x, y) => x - y);
+  const m = b.length >> 1;
+  return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2;
+}
+
+// 옥타브 오류 보정: 기준값(ref)에 가깝도록 2배/½배로 접는다
+function octaveFold(raw, ref) {
+  if (!ref || ref <= 0) return raw;
+  let f = raw;
+  for (let k = 0; k < 3; k++) {
+    if (f / ref > 1.5) f /= 2;
+    else if (ref / f > 1.5) f *= 2;
+    else break;
+  }
+  if (f < F0_MIN || f > F0_MAX) return raw; // 보정이 범위를 벗어나면 원값 유지
+  return f;
 }
 
 async function startBiofeedback() {
@@ -173,32 +198,45 @@ export function stopBiofeedback() {
 }
 
 function onBuffer(buf, sr) {
-  // 다운샘플 후 단일 프레임 F0 추정
-  const ds = resample(buf, sr, ANALYSIS_SR);
-  let f0 = 0;
-  // 충분한 길이일 때만
-  if (ds.length >= 600) {
-    const r = yinPitch(ds, ANALYSIS_SR);
-    f0 = r.f0;
+  // 원본 표본화율 그대로 F0 추정(다운샘플 왜곡 없이 고음 해상도 확보)
+  let raw = 0;
+  if (buf.length >= 1024) {
+    raw = yinPitch(buf, sr).f0;
   }
   const t = (performance.now() - startTime) / 1000;
-  history.push({ t, f0: f0 > 0 ? f0 : null });
+
+  // 평활 + 옥타브 가드
+  let display = null;
+  if (raw > 0) {
+    const ref = smoothedF0 || (rawWindow.length ? median(rawWindow) : 0);
+    raw = octaveFold(raw, ref);
+    rawWindow.push(raw);
+    if (rawWindow.length > 5) rawWindow.shift();
+    const med = median(rawWindow);           // 단발 이상치 제거(중앙값)
+    smoothedF0 = smoothedF0 == null ? med : 0.6 * smoothedF0 + 0.4 * med; // EMA
+    display = smoothedF0;
+  } else {
+    rawWindow.length = 0;
+    smoothedF0 = null; // 무성 구간에서 초기화 → 다음 발성 시작 시 새로 추정
+  }
+
+  history.push({ t, f0: display });
 
   // 오래된 데이터 정리
   const cutoff = t - WINDOW_SEC - 1;
   while (history.length && history[0].t < cutoff) history.shift();
 
-  // 통계/게임화
-  if (f0 > 0) {
+  // 통계/게임화 (평활된 display 기준)
+  if (display != null) {
     stats.voicedFrames++;
-    const inTarget = f0 >= target.lowF0 && f0 <= target.highF0;
+    const inTarget = display >= target.lowF0 && display <= target.highF0;
     if (inTarget) {
       stats.inTargetFrames++;
       if (stats.streakStart == null) stats.streakStart = t;
       const streak = t - stats.streakStart;
       if (streak > stats.bestStreak) stats.bestStreak = streak;
       stats.combo = Math.min(5, 1 + Math.floor(streak / 2));
-      stats.score += stats.combo; // 적중 유지 시 콤보 가산
+      stats.score += stats.combo;
     } else {
       stats.streakStart = null;
       stats.combo = 0;

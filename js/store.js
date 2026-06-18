@@ -47,12 +47,13 @@ export function addRecord(type, metrics, tag = null) {
     rec.jitter = metrics.jitterLocal;
     rec.shimmer = metrics.shimmerLocal;
     rec.shimmerDB = metrics.shimmerDB;
+    rec.cpp = metrics.meanCPPS;
   } else {
     rec.f0 = metrics.meanSFF;
     rec.f0sd = metrics.sdSFF;
     rec.f0min = metrics.minSFF;
     rec.f0max = metrics.maxSFF;
-    rec.cpp = metrics.meanCPP;
+    rec.cpp = metrics.meanCPPS;
     rec.breaks = metrics.breaksPerMin;
     rec.sdST = metrics.sdST;
   }

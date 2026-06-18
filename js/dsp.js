@@ -224,6 +224,9 @@ export function analyzeSustained(signal, sr) {
 
   const cyclesUsed = inRangePeriods.length;
 
+  // 6) CPPS — 지속 모음의 음질 지표 (세션1에도 추가)
+  const { meanCPPS, sdCPPS } = meanCPPSOverVoiced(signal, sr, contour);
+
   return {
     ok: true,
     meanF0,
@@ -237,6 +240,8 @@ export function analyzeSustained(signal, sr) {
     shimmerLocal,
     shimmerDB,
     shimmerAPQ5,
+    meanCPPS,
+    sdCPPS,
     durationSec: signal.length / sr,
   };
 }
@@ -381,68 +386,105 @@ function constrainedShimmerDb(amps, maxFactor) {
 }
 
 // ---------------------------------------------------------------------------
-// Cepstral Peak Prominence (단일 프레임)
-// 실수 켑스트럼을 구하고 F0 대역(quefrency)의 피크 돌출도를 회귀선 대비로 측정
-// 반환: cpp 값(dB), 검출 실패 시 null
+// CPPS — Smoothed Cepstral Peak Prominence
+// 로그파워 스펙트럼의 실수 켑스트럼을 quefrency·시간으로 평활한 뒤,
+// F0 대역 피크를 전체 quefrency 회귀선 대비 돌출도(dB)로 측정한다.
+// (raw CPP보다 잡음이 적고 임상 CPPS 정의에 가깝다.)
 // ---------------------------------------------------------------------------
-export function cppFrame(frame, sr) {
-  const n0 = frame.length;
-  const N = nextPow2(n0);
 
-  // 윈도우 적용 + 제로패딩
-  const win = hann(n0);
+// 한 프레임의 dB 켑스트럼(quefrency 0..N/2) 계산
+function frameCepstrumDb(signal, start, frameSize, N, win) {
   const re = new Float64Array(N);
   const im = new Float64Array(N);
-  for (let i = 0; i < n0; i++) re[i] = frame[i] * win[i];
-
-  // FFT → 로그 크기 스펙트럼
+  for (let i = 0; i < frameSize; i++) re[i] = (signal[start + i] || 0) * win[i];
   fft(re, im);
-  const logMag = new Float64Array(N);
+  // 로그 파워 스펙트럼
   for (let i = 0; i < N; i++) {
-    const mag = Math.sqrt(re[i] * re[i] + im[i] * im[i]);
-    logMag[i] = Math.log(mag + 1e-12);
+    const p = re[i] * re[i] + im[i] * im[i];
+    re[i] = Math.log(p + 1e-12);
+    im[i] = 0;
   }
+  ifft(re, im); // 실수 켑스트럼 → re
+  const half = N >> 1;
+  const cdb = new Float64Array(half + 1);
+  for (let q = 0; q <= half; q++) cdb[q] = 20 * Math.log10(Math.abs(re[q]) + 1e-12);
+  return cdb;
+}
 
-  // 로그 스펙트럼의 IFFT → 실수 켑스트럼
-  const cre = new Float64Array(N);
-  const cim = new Float64Array(N);
-  for (let i = 0; i < N; i++) cre[i] = logMag[i];
-  ifft(cre, cim);
-  // 켑스트럼 크기 (quefrency 영역)
-  const ceps = new Float64Array(N);
-  for (let i = 0; i < N; i++) {
-    ceps[i] = Math.sqrt(cre[i] * cre[i] + cim[i] * cim[i]);
+// 1차원 이동평균 (폭 W)
+function movingAvg1D(arr, W) {
+  const n = arr.length;
+  const out = new Float64Array(n);
+  const half = W >> 1;
+  for (let i = 0; i < n; i++) {
+    let s = 0, c = 0;
+    const lo = Math.max(0, i - half), hi = Math.min(n - 1, i + half);
+    for (let j = lo; j <= hi; j++) { s += arr[j]; c++; }
+    out[i] = s / c;
   }
+  return out;
+}
 
-  // dB 켑스트럼
-  const cepsDb = new Float64Array(N);
-  for (let i = 0; i < N; i++) cepsDb[i] = 20 * Math.log10(ceps[i] + 1e-12);
-
-  // F0 대역에 해당하는 quefrency 범위
-  const qMin = Math.floor(sr / F0_MAX);
-  const qMax = Math.min(Math.ceil(sr / F0_MIN), N / 2 - 1);
-  if (qMax <= qMin + 2) return null;
-
-  // 회귀선: qMin..qMax 구간의 켑스트럼에 대한 최소제곱 직선
-  let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0, cnt = 0;
-  for (let q = qMin; q <= qMax; q++) {
-    sumX += q; sumY += cepsDb[q]; sumXY += q * cepsDb[q]; sumXX += q * q; cnt++;
+// 평활된 켑스트럼에서 CPP(dB) 계산
+function cppFromCepstrum(cdb, qLow, qRegHi, qpLo, qpHi) {
+  let sx = 0, sy = 0, sxy = 0, sxx = 0, n = 0;
+  for (let q = qLow; q <= qRegHi; q++) {
+    sx += q; sy += cdb[q]; sxy += q * cdb[q]; sxx += q * q; n++;
   }
-  const denom = cnt * sumXX - sumX * sumX;
-  if (denom === 0) return null;
-  const slope = (cnt * sumXY - sumX * sumY) / denom;
-  const intercept = (sumY - slope * sumX) / cnt;
-
-  // 피크 탐색 및 회귀선 대비 돌출도
+  const denom = n * sxx - sx * sx;
+  if (denom === 0) return NaN;
+  const slope = (n * sxy - sx * sy) / denom;
+  const intercept = (sy - slope * sx) / n;
   let peakQ = -1, peakVal = -Infinity;
-  for (let q = qMin; q <= qMax; q++) {
-    if (cepsDb[q] > peakVal) { peakVal = cepsDb[q]; peakQ = q; }
+  for (let q = qpLo; q <= qpHi; q++) {
+    if (cdb[q] > peakVal) { peakVal = cdb[q]; peakQ = q; }
   }
-  if (peakQ < 0) return null;
-  const regAtPeak = slope * peakQ + intercept;
-  const cpp = peakVal - regAtPeak;
-  const f0 = sr / peakQ;
-  return { cpp, f0 };
+  if (peakQ < 0) return NaN;
+  return peakVal - (slope * peakQ + intercept);
+}
+
+// 프레임별 CPPS 컨투어 (시간 평활은 링 버퍼로 메모리 절약)
+// 반환: Float64Array(nFrames), 계산 불가 프레임은 NaN
+function cppsPerFrame(signal, sr, frameSize, hop, nFrames) {
+  const N = nextPow2(frameSize);
+  const half = N >> 1;
+  const win = hann(frameSize);
+  const qLow = Math.max(2, Math.round(sr * 0.001));   // ~1ms 이상(저-quefrency 기울기 제외)
+  const qRegHi = half - 1;                             // 회귀선: 전체 quefrency
+  const qpLo = Math.max(qLow + 1, Math.floor(sr / F0_MAX));
+  const qpHi = Math.min(half - 1, Math.ceil(sr / F0_MIN));
+  const Wt = 7, halfT = Wt >> 1, Wq = 11;              // 시간·quefrency 평활 폭
+  const ring = [];
+  const out = new Float64Array(nFrames).fill(NaN);
+  if (qpHi <= qpLo + 2) return out;
+
+  for (let f = 0; f < nFrames; f++) {
+    const raw = frameCepstrumDb(signal, f * hop, frameSize, N, win);
+    ring.push(movingAvg1D(raw, Wq));
+    if (ring.length > Wt) ring.shift();
+    if (ring.length === Wt) {
+      const mean = new Float64Array(half + 1);
+      for (let q = 0; q <= qRegHi; q++) {
+        let s = 0;
+        for (let t = 0; t < Wt; t++) s += ring[t][q];
+        mean[q] = s / Wt;
+      }
+      out[f - halfT] = cppFromCepstrum(mean, qLow, qRegHi, qpLo, qpHi);
+    }
+  }
+  return out;
+}
+
+// 유성 프레임의 평균 CPPS (지속 모음·발화 공용)
+function meanCPPSOverVoiced(signal, sr, contour) {
+  const cpps = cppsPerFrame(signal, sr, contour.frameSize, contour.hop, contour.nFrames);
+  const vals = [];
+  for (let f = 0; f < contour.nFrames; f++) {
+    if (contour.voiced[f] && !Number.isNaN(cpps[f])) vals.push(cpps[f]);
+  }
+  if (!vals.length) return { meanCPPS: null, sdCPPS: null, cpps };
+  const m = mean(vals);
+  return { meanCPPS: m, sdCPPS: std(vals, m), cpps };
 }
 
 // ---------------------------------------------------------------------------
@@ -488,21 +530,9 @@ export function analyzeSpeech(signal, sr) {
     count,
   }));
 
-  // 2) CPP — 유성 프레임마다 계산해 평균
-  const frameSize = contour.frameSize;
+  // 2) CPPS — 평활 켑스트럼 피크 돌출도 (유성 프레임 평균)
+  const { meanCPPS, sdCPPS } = meanCPPSOverVoiced(signal, sr, contour);
   const hop = contour.hop;
-  const win = hann(frameSize);
-  const cppVals = [];
-  const frame = new Float64Array(frameSize);
-  for (let f = 0; f < nFrames; f++) {
-    if (!voiced[f]) continue;
-    const start = f * hop;
-    for (let i = 0; i < frameSize; i++) frame[i] = signal[start + i];
-    const r = cppFrame(frame, sr);
-    if (r && isFinite(r.cpp)) cppVals.push(r.cpp);
-  }
-  const meanCPP = cppVals.length ? mean(cppVals) : null;
-  const sdCPP = cppVals.length ? std(cppVals, meanCPP) : null;
 
   // 3) Pitch Breaks — 인접 유성 프레임 간 음도 급변 + 발성 중 끊김
   // 정의:
@@ -565,8 +595,8 @@ export function analyzeSpeech(signal, sr) {
     minSFF,
     maxSFF,
     histogram,
-    meanCPP,
-    sdCPP,
+    meanCPPS,
+    sdCPPS,
     octaveJumps,
     voiceBreaks,
     totalBreaks,

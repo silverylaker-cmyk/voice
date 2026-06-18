@@ -1,7 +1,7 @@
 // app.js — UI 제어 및 분석 파이프라인 연결 (5개 세션 코디네이터)
 import { Recorder } from './recorder.js';
 import { resample, analyzeSustained, analyzeSpeech, ANALYSIS_SR } from './dsp.js';
-import { explainSustained, explainSpeech, LEVEL } from './explain.js';
+import { explainSustained, explainSpeech, explainCombined, LEVEL } from './explain.js';
 import { drawHistogram, drawContour, drawLineSeries, COL } from './charts.js';
 import * as store from './store.js';
 import { renderMassage } from './massage.js';
@@ -234,10 +234,38 @@ function renderCards(parsed) {
   box.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-function renderSustained(r) { renderCards(explainSustained(r)); }
+// #results 에 단일 카드(종합 해석 등)를 덧붙인다
+function appendCard(item) {
+  const card = document.createElement('div');
+  card.className = 'card ' + levelClass(item.level);
+  card.innerHTML = `
+    <div class="card-head">
+      <span class="card-key">${item.key}</span>
+      <span class="card-value">${item.value}</span>
+    </div>
+    ${item.sub ? `<div class="card-sub">${item.sub}</div>` : ''}
+    <div class="card-desc">${item.desc}</div>`;
+  $('#results').appendChild(card);
+}
+
+// 세션1 지터 × 세션2 CPPS 종합 해석 카드(상대 기록이 있을 때만)
+function appendCombined(jitter, cpps) {
+  if (jitter == null || cpps == null) return;
+  appendCard(explainCombined(jitter, cpps));
+}
+
+function renderSustained(r) {
+  renderCards(explainSustained(r));
+  // 최근 발화(세션2) CPPS가 있으면 종합 해석 추가
+  const speech = store.getLatest('speech');
+  if (speech) appendCombined(r.jitterLocal, speech.cpp);
+}
 
 function renderSpeech(r) {
   renderCards(explainSpeech(r));
+  // 최근 음성검사(세션1) 지터가 있으면 종합 해석 추가
+  const vowel = store.getLatest('vowel');
+  if (vowel) appendCombined(vowel.jitter, r.meanCPPS);
   const chartBox = document.createElement('div');
   chartBox.className = 'card chart-card';
   chartBox.innerHTML = `<div class="card-key">SFF 분포 (음높이별 사용 빈도)</div>`;
