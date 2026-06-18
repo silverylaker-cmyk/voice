@@ -264,8 +264,21 @@ main { max-width: 640px; margin: 0 auto; padding: 0 16px 24px; }
 
 /* ===== 세션4: 바이오피드백 ===== */
 .target-info .target-val { font-size: 1.5rem; font-weight: 800; color: var(--good); }
-.target-info .target-center { font-size: .85rem; color: var(--muted); font-weight: 500; margin-left: 6px; }
+.target-info .target-center { font-size: .85rem; color: var(--muted); font-weight: 500; }
 .target-info small { font-size: .9rem; }
+.target-center-row {
+  display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap;
+}
+.target-manual {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: .8rem; color: var(--muted); font-weight: 600;
+}
+.target-input {
+  width: 64px; padding: 6px 8px; border: 1.5px solid #c2cfe4; border-radius: 8px;
+  font-size: 1rem; font-weight: 700; color: var(--primary-d); text-align: center;
+  background: #fbfcff;
+}
+.target-input:focus { outline: none; border-color: var(--primary); }
 
 .score-board {
   display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px;

@@ -54,13 +54,41 @@ export function renderBiofeedback(panel, api) {
     panel.appendChild(card);
   }
 
-  // 타겟 표시
+  // 타겟 표시 (+ 수동 입력)
   const tinfo = document.createElement('div');
   tinfo.className = 'card target-info';
   tinfo.innerHTML = `<div class="card-key">🎯 목표 음역대</div>
-    <div class="target-val">${target.lowF0.toFixed(0)} ~ ${target.highF0.toFixed(0)} <small>Hz</small>
-    <span class="target-center">(중심 ${target.meanF0.toFixed(0)}Hz)</span></div>`;
+    <div class="target-val"><span id="bf-range">${target.lowF0.toFixed(0)} ~ ${target.highF0.toFixed(0)}</span> <small>Hz</small></div>
+    <div class="target-center-row">
+      <label class="target-manual">F0 수동 입력
+        <input type="number" id="bf-target-input" class="target-input"
+          min="50" max="500" step="1" inputmode="numeric"
+          value="${target.meanF0.toFixed(0)}" /> Hz
+      </label>
+      <span class="target-center">(중심 <span id="bf-center">${target.meanF0.toFixed(0)}</span>Hz)</span>
+    </div>`;
   panel.appendChild(tinfo);
+
+  // 수동 입력 → 중심 F0 기준 ±2반음 밴드 재계산
+  const input = tinfo.querySelector('#bf-target-input');
+  const applyManual = () => {
+    const v = parseFloat(input.value);
+    if (!isFinite(v) || v < 50 || v > 500) return;
+    const semis = 2;
+    target = {
+      ...target,
+      meanF0: v,
+      lowF0: v * Math.pow(2, -semis / 12),
+      highF0: v * Math.pow(2, semis / 12),
+      manual: true,
+    };
+    tinfo.querySelector('#bf-range').textContent =
+      `${target.lowF0.toFixed(0)} ~ ${target.highF0.toFixed(0)}`;
+    tinfo.querySelector('#bf-center').textContent = v.toFixed(0);
+    drawLive(); // 정지 상태에서도 즉시 반영(녹음 중이면 다음 프레임에 자동 반영)
+  };
+  input.addEventListener('input', applyManual);
+  input.addEventListener('change', applyManual);
 
   // 게임화 점수판
   const score = document.createElement('div');
