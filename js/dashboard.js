@@ -3,6 +3,7 @@
 
 import { aggregateByDay } from './store.js';
 import { drawLineSeries, COL } from './charts.js';
+import { SHOW } from './explain.js';
 
 let viewMode = 'calendar';   // 'calendar' | 'weekly'
 let calMonth = null;          // Date (해당 월 1일)
@@ -128,13 +129,15 @@ function renderWeekly(body, data) {
     [{ label: 'F0', color: COL.blue, points: f0Pts }], sparseLabels,
     '말하기·발성 시 평균 음높이의 일별 추이입니다.'));
 
-  body.appendChild(weekChart('CPP (음질 지표, dB)',
-    [{ label: 'CPP', color: COL.green, points: cppPts }], sparseLabels,
-    '값이 높을수록 맑은 음질. 발화 평가(세션2)에서 기록됩니다.'));
+  body.appendChild(weekChart('CPPS (음질 지표, dB)',
+    [{ label: 'CPPS', color: COL.green, points: cppPts }], sparseLabels,
+    '값이 높을수록 맑은 음질. 검사(세션1·2)에서 기록됩니다.'));
 
-  body.appendChild(weekChart('Jitter / Shimmer (%)',
-    [{ label: 'Jitter', color: COL.pink, points: jitPts },
-     { label: 'Shimmer', color: COL.amber, points: shimPts }], sparseLabels,
+  // 쉬머는 SHOW.shimmer 에 따라 표시(현재 비표시) — 코드는 유지
+  const jitterSeries = [{ label: 'Jitter', color: COL.pink, points: jitPts }];
+  if (SHOW.shimmer) jitterSeries.push({ label: 'Shimmer', color: COL.amber, points: shimPts });
+  body.appendChild(weekChart(SHOW.shimmer ? 'Jitter / Shimmer (%)' : 'Jitter (%)',
+    jitterSeries, sparseLabels,
     '음성 검사(세션1)의 떨림 지표. 낮을수록 안정적입니다.'));
 
   // 요약 통계

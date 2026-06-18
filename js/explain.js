@@ -5,6 +5,13 @@
 // 등급 → 색상 키
 export const LEVEL = { GOOD: 'good', MILD: 'mild', WARN: 'warn' };
 
+// 결과 표시 토글 — 코드는 유지하되 화면 노출만 제어한다.
+// 다시 보이게 하려면 해당 값을 true 로 바꾸면 된다.
+export const SHOW = {
+  shimmer: false,      // 세션1 쉬머 카드 + 대시보드 쉬머 그래프
+  pitchBreaks: false,  // 세션2 음도 일탈 카드
+};
+
 function pick(value, goodMax, mildMax) {
   if (value <= goodMax) return LEVEL.GOOD;
   if (value <= mildMax) return LEVEL.MILD;
@@ -48,22 +55,24 @@ export function explainSustained(r) {
         : '주기 변동이 큰 편입니다. 지속될 경우 음성 휴식과 전문가 상담을 권합니다.'),
   });
 
-  // Shimmer (local) — 정상 < 3.81%, dB < 0.35
-  const sLevel = pick(r.shimmerLocal, 3.81, 6.0);
-  items.push({
-    key: 'Shimmer (쉬머, local)',
-    value: `${r.shimmerLocal.toFixed(2)} %`,
-    sub: `${r.shimmerDB.toFixed(2)} dB · APQ5 ${r.shimmerAPQ5.toFixed(2)}%`,
-    level: sLevel,
-    desc:
-      '연속한 진동의 "세기(진폭)"가 얼마나 들쭉날쭉한지를 나타내는 떨림입니다. ' +
-      '일반적으로 3.81%(또는 0.35dB) 이하를 정상으로 봅니다. ' +
-      (sLevel === LEVEL.GOOD
-        ? '진폭이 고르게 유지됩니다.'
-        : sLevel === LEVEL.MILD
-        ? '약간의 진폭 흔들림이 있습니다. 거친 느낌(조조성)이 들 수 있습니다.'
-        : '진폭 변동이 큰 편입니다. 쉰 목소리·바람 새는 느낌과 관련될 수 있습니다.'),
-  });
+  // Shimmer (local) — 정상 < 3.81%, dB < 0.35  (현재 화면 비표시: SHOW.shimmer)
+  if (SHOW.shimmer) {
+    const sLevel = pick(r.shimmerLocal, 3.81, 6.0);
+    items.push({
+      key: 'Shimmer (쉬머, local)',
+      value: `${r.shimmerLocal.toFixed(2)} %`,
+      sub: `${r.shimmerDB.toFixed(2)} dB · APQ5 ${r.shimmerAPQ5.toFixed(2)}%`,
+      level: sLevel,
+      desc:
+        '연속한 진동의 "세기(진폭)"가 얼마나 들쭉날쭉한지를 나타내는 떨림입니다. ' +
+        '일반적으로 3.81%(또는 0.35dB) 이하를 정상으로 봅니다. ' +
+        (sLevel === LEVEL.GOOD
+          ? '진폭이 고르게 유지됩니다.'
+          : sLevel === LEVEL.MILD
+          ? '약간의 진폭 흔들림이 있습니다. 거친 느낌(조조성)이 들 수 있습니다.'
+          : '진폭 변동이 큰 편입니다. 쉰 목소리·바람 새는 느낌과 관련될 수 있습니다.'),
+    });
+  }
 
   // CPPS — 지속 모음의 음질 지표 (모음은 대략 ≥9 양호, <6 주의)
   if (r.meanCPPS != null) {
@@ -138,22 +147,24 @@ export function explainSpeech(r) {
     });
   }
 
-  // Pitch Breaks
-  const bLevel = r.breaksPerMin <= 3 ? LEVEL.GOOD : r.breaksPerMin <= 8 ? LEVEL.MILD : LEVEL.WARN;
-  items.push({
-    key: '음도 일탈 (Pitch Breaks)',
-    value: `${r.totalBreaks}회`,
-    sub: `분당 ${r.breaksPerMin.toFixed(1)}회 · 음높이 급변 ${r.octaveJumps} / 발성 끊김 ${r.voiceBreaks}`,
-    level: bLevel,
-    desc:
-      '말하는 도중 음높이가 갑자기 튀거나(옥타브성 도약) 발성이 순간적으로 끊기는 현상입니다. ' +
-      '음성 피로나 성대 불안정에서 늘어날 수 있습니다. ' +
-      (bLevel === LEVEL.GOOD
-        ? '음도가 안정적으로 잘 유지되고 있습니다.'
-        : bLevel === LEVEL.MILD
-        ? '간헐적인 음도 일탈이 있습니다. 음성 사용량이 많을 때 나타날 수 있습니다.'
-        : '음도 일탈이 잦은 편입니다. 음성 휴식과 함께 지속 시 전문가 상담을 권합니다.'),
-  });
+  // Pitch Breaks (현재 화면 비표시: SHOW.pitchBreaks)
+  if (SHOW.pitchBreaks) {
+    const bLevel = r.breaksPerMin <= 3 ? LEVEL.GOOD : r.breaksPerMin <= 8 ? LEVEL.MILD : LEVEL.WARN;
+    items.push({
+      key: '음도 일탈 (Pitch Breaks)',
+      value: `${r.totalBreaks}회`,
+      sub: `분당 ${r.breaksPerMin.toFixed(1)}회 · 음높이 급변 ${r.octaveJumps} / 발성 끊김 ${r.voiceBreaks}`,
+      level: bLevel,
+      desc:
+        '말하는 도중 음높이가 갑자기 튀거나(옥타브성 도약) 발성이 순간적으로 끊기는 현상입니다. ' +
+        '음성 피로나 성대 불안정에서 늘어날 수 있습니다. ' +
+        (bLevel === LEVEL.GOOD
+          ? '음도가 안정적으로 잘 유지되고 있습니다.'
+          : bLevel === LEVEL.MILD
+          ? '간헐적인 음도 일탈이 있습니다. 음성 사용량이 많을 때 나타날 수 있습니다.'
+          : '음도 일탈이 잦은 편입니다. 음성 휴식과 함께 지속 시 전문가 상담을 권합니다.'),
+    });
+  }
 
   // 분석 메타
   items.push({
@@ -164,8 +175,8 @@ export function explainSpeech(r) {
     desc: '전체 녹음 길이와, 그중 실제로 목소리를 낸(유성) 구간의 비율입니다.',
   });
 
-  const worst = [items[0], items[1], items[2]]
-    .filter(Boolean)
+  // 표시되는 모든 항목으로 종합 등급 산출(숨긴 지표는 영향 없음, 메타는 GOOD이라 무해)
+  const worst = items
     .map((i) => i.level)
     .reduce((a, b) => (rank(b) > rank(a) ? b : a), LEVEL.GOOD);
 

@@ -2,6 +2,7 @@
 // 설명 슬라이드 + 시연 영상 → 따라하기 → 세션1 검사 재시행 → 마사지 전/후 비교
 
 import { drawBeforeAfter } from './charts.js';
+import { SHOW } from './explain.js';
 
 // 후두 주변 해부 구조를 간단히 그린 SVG (목 측면)
 function neckSVG(highlight) {
@@ -239,8 +240,9 @@ export function renderComparison(panel, before, after, api) {
   const rows = [
     ['F0 (기본 주파수)', beforeF0, after.meanF0, 'Hz', false],
     ['Jitter (지터)', before?.jitter, after.jitterLocal, '%', true],
-    ['Shimmer (쉬머)', before?.shimmer, after.shimmerLocal, '%', true],
   ];
+  // 쉬머는 SHOW.shimmer 에 따라 표시(현재 비표시) — 코드는 유지
+  if (SHOW.shimmer) rows.push(['Shimmer (쉬머)', before?.shimmer, after.shimmerLocal, '%', true]);
   const tbl = document.createElement('div');
   tbl.className = 'cmp-table';
   tbl.innerHTML = `<div class="cmp-head"><span>항목</span><span>전</span><span>후</span><span>변화</span></div>` +
@@ -273,11 +275,13 @@ export function renderComparison(panel, before, after, api) {
     cv.className = 'chart';
     chartCard.appendChild(cv);
     box.appendChild(chartCard);
-    drawBeforeAfter(cv, [
+    const baSeries = [
       { label: 'F0(Hz)', before: beforeF0, after: after.meanF0, unit: '', betterIsLow: false },
       { label: 'Jitter(%)', before: before.jitter, after: after.jitterLocal, unit: '', betterIsLow: true },
-      { label: 'Shimmer(%)', before: before.shimmer, after: after.shimmerLocal, unit: '', betterIsLow: true },
-    ]);
+    ];
+    if (SHOW.shimmer) baSeries.push(
+      { label: 'Shimmer(%)', before: before.shimmer, after: after.shimmerLocal, unit: '', betterIsLow: true });
+    drawBeforeAfter(cv, baSeries);
   }
 
   // 시간 추이 그래프 (이 항목의 모든 vowel 기록을 시간순으로)

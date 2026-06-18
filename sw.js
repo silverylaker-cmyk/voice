@@ -1,5 +1,5 @@
 // sw.js — 오프라인 지원용 서비스워커 (앱 셸 캐싱)
-const CACHE = 'voice-analysis-v3';
+const CACHE = 'voice-analysis-v4';
 const ASSETS = [
   './',
   './index.html',
