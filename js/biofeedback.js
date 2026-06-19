@@ -5,7 +5,8 @@
 import { Recorder } from './recorder.js';
 import { yinPitch, F0_MIN, F0_MAX } from './dsp.js';
 
-const WINDOW_SEC = 12; // 화면에 보이는 시간 폭
+const WINDOW_SEC = 10;  // 화면에 보이는 시간 폭(초)
+const SFF_WIN = 10;     // SFF 계산용 트레일링 윈도(초) — 최근 10초 발화의 평균 F0
 
 let rec = null;
 let rafId = null;
@@ -25,9 +26,10 @@ export function renderBiofeedback(panel, api) {
 
   const intro = document.createElement('div');
   intro.className = 'guide';
-  intro.innerHTML = `<h2>실시간 바이오피드백</h2>
-    <p>말하는 동안 <b>현재 목소리 높이(F0)</b>가 흐르는 선으로 표시됩니다.
-    <b>녹색 영역(목표 음역대)</b> 안으로 선이 들어오도록 편안하게 말해보세요.</p>`;
+  intro.innerHTML = `<h2>실시간 바이오피드백 (SFF)</h2>
+    <p>말하는 동안 <b>최근 10초 발화의 SFF</b>(발화 기본 주파수, 유성 F0 평균)가
+    굵은 선으로 표시됩니다. <b>녹색 영역(목표 음역대)</b> 안으로 SFF 선이
+    들어오도록 편안하게 말해보세요. (옅은 회색은 참고용 순간 음높이)</p>`;
   panel.appendChild(intro);
 
   if (!target) {
@@ -106,7 +108,7 @@ export function renderBiofeedback(panel, api) {
   cvWrap = document.createElement('div');
   cvWrap.className = 'card chart-card live-wrap';
   cvWrap.innerHTML = `<canvas id="bf-canvas" class="live-canvas"></canvas>
-    <div class="live-readout"><span id="bf-cur">–</span><small>Hz</small></div>`;
+    <div class="live-readout"><span id="bf-cur">–</span><small>SFF·Hz</small></div>`;
   panel.appendChild(cvWrap);
   canvas = cvWrap.querySelector('#bf-canvas');
 
@@ -220,16 +222,20 @@ function onBuffer(buf, sr) {
     smoothedF0 = null; // 무성 구간에서 초기화 → 다음 발성 시작 시 새로 추정
   }
 
-  history.push({ t, f0: display });
+  history.push({ t, f0: display, sff: null });
 
   // 오래된 데이터 정리
   const cutoff = t - WINDOW_SEC - 1;
   while (history.length && history[0].t < cutoff) history.shift();
 
-  // 통계/게임화 (평활된 display 기준)
-  if (display != null) {
+  // 최근 SFF_WIN초 발화의 SFF(유성 F0 평균) 계산 → 현재 점에 저장
+  const sff = trailingSFF(t);
+  history[history.length - 1].sff = sff;
+
+  // 통계/게임화 (SFF 기준)
+  if (sff != null) {
     stats.voicedFrames++;
-    const inTarget = display >= target.lowF0 && display <= target.highF0;
+    const inTarget = sff >= target.lowF0 && sff <= target.highF0;
     if (inTarget) {
       stats.inTargetFrames++;
       if (stats.streakStart == null) stats.streakStart = t;
@@ -248,6 +254,16 @@ function onBuffer(buf, sr) {
   }
 }
 
+// 최근 SFF_WIN초 구간의 유성 F0 평균(SFF). 유성 표본이 없으면 null.
+function trailingSFF(now) {
+  let sum = 0, c = 0;
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (history[i].t < now - SFF_WIN) break;
+    if (history[i].f0 != null) { sum += history[i].f0; c++; }
+  }
+  return c ? sum / c : null;
+}
+
 function loop() {
   if (!running) return;
   drawLive();
@@ -264,18 +280,19 @@ function updateScoreboard() {
   set('bf-streak', cur.toFixed(1) + 's');
   set('bf-best', stats.bestStreak.toFixed(1) + 's');
 
-  // 현재 F0 읽기
-  const last = [...history].reverse().find((p) => p.f0 != null);
-  set('bf-cur', last ? last.f0.toFixed(0) : '–');
+  // 현재 SFF 읽기
+  const last = [...history].reverse().find((p) => p.sff != null);
+  const sff = last ? last.sff : null;
+  set('bf-cur', sff != null ? sff.toFixed(0) : '–');
 
   // 격려 메시지
   const msg = document.getElementById('bf-msg');
   if (msg) {
-    if (stats.combo >= 4) msg.textContent = '🔥 완벽해요! 이 음높이를 유지하세요!';
+    if (stats.combo >= 4) msg.textContent = '🔥 완벽해요! 이 SFF를 유지하세요!';
     else if (stats.combo >= 2) msg.textContent = '👍 좋아요! 목표 영역에 잘 머물고 있어요.';
-    else if (last && last.f0 != null) {
-      msg.textContent = last.f0 > target.highF0 ? '🔽 조금 낮게 말해보세요.'
-        : last.f0 < target.lowF0 ? '🔼 조금 높게 말해보세요.' : '🎯 목표 영역 진입!';
+    else if (sff != null) {
+      msg.textContent = sff > target.highF0 ? '🔽 조금 낮게 말해보세요.'
+        : sff < target.lowF0 ? '🔼 조금 높게 말해보세요.' : '🎯 목표 영역 진입!';
     } else msg.textContent = '';
   }
 }
@@ -334,26 +351,41 @@ function drawLive() {
     ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(w - pad.r, y); ctx.stroke();
     ctx.fillText(val.toFixed(0), 2, y + 3);
   }
+  // Y축 제목: SFF(Hz)
+  ctx.fillStyle = '#8a96a8'; ctx.font = 'bold 10px sans-serif';
+  ctx.fillText('SFF(Hz)', pad.l + 2, pad.t + 10);
 
-  // 피치 라인
-  ctx.lineWidth = 2.2;
+  // 순간 F0(참고용, 옅은 회색 라인) — 실시간 발화 활동을 보조 표시
+  ctx.strokeStyle = 'rgba(150,160,175,0.45)'; ctx.lineWidth = 1;
+  ctx.beginPath();
+  let s2 = false;
+  for (const p of history) {
+    if (p.t < tStart) continue;
+    if (p.f0 == null) { s2 = false; continue; }
+    const x = xOf(p.t), y = yOf(p.f0);
+    if (!s2) { ctx.moveTo(x, y); s2 = true; } else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // SFF 라인(굵게) — 최근 10초 발화의 평균 F0
+  ctx.lineWidth = 2.6;
   ctx.beginPath();
   let started = false;
   for (const p of history) {
     if (p.t < tStart) continue;
-    if (p.f0 == null) { started = false; continue; }
-    const x = xOf(p.t), y = yOf(p.f0);
+    if (p.sff == null) { started = false; continue; }
+    const x = xOf(p.t), y = yOf(p.sff);
     if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
   }
-  // 색상: 마지막 점이 타겟 안이면 녹색
-  const last = [...history].reverse().find((p) => p.f0 != null);
-  const inT = last && last.f0 >= target.lowF0 && last.f0 <= target.highF0;
+  // 색상: 현재 SFF가 타겟 안이면 녹색
+  const last = [...history].reverse().find((p) => p.sff != null);
+  const inT = last && last.sff >= target.lowF0 && last.sff <= target.highF0;
   ctx.strokeStyle = inT ? '#2eb872' : '#5b8def';
   ctx.stroke();
 
-  // 현재 위치 표시 점
+  // 현재 SFF 위치 표시 점
   if (last && last.t >= tStart) {
-    const x = xOf(Math.min(last.t, tEnd)), y = yOf(last.f0);
+    const x = xOf(Math.min(last.t, tEnd)), y = yOf(last.sff);
     ctx.fillStyle = inT ? '#2eb872' : '#e0457b';
     ctx.beginPath(); ctx.arc(x, y, 5, 0, 2 * Math.PI); ctx.fill();
   }
