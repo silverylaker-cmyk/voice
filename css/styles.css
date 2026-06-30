@@ -325,3 +325,43 @@ main { max-width: 640px; margin: 0 auto; padding: 0 16px 24px; }
 .cal-metric.cpp { color: var(--good); }
 .cal-count { color: var(--muted); font-size: .56rem; }
 .cal-legend { margin-top: 10px; }
+
+/* ===== 세션4 게임 요소 ===== */
+.score-item.star { background: linear-gradient(135deg,#fff6da,#ffe9a8); }
+.score-item.star .score-num { color: #d99a16; }
+
+.charge-wrap { margin: 2px 2px 12px; }
+.charge-head {
+  display: flex; justify-content: space-between; font-size: .76rem;
+  color: var(--muted); font-weight: 700; margin-bottom: 4px;
+}
+.charge-head #bf-streak { color: var(--primary-d); }
+.charge-bar {
+  height: 14px; background: #e8edf6; border-radius: 999px; overflow: hidden;
+}
+.charge-fill {
+  height: 100%; width: 0%; border-radius: 999px;
+  background: linear-gradient(90deg, #5b8def, #2eb872);
+  transition: width .12s linear;
+}
+.charge-fill.full-near {
+  background: linear-gradient(90deg, #e9a23b, #ffd34d);
+  box-shadow: 0 0 8px rgba(255,200,60,.7);
+}
+
+.bf-summary {
+  display: flex; gap: 14px; align-items: center;
+  border-left: none; color: #fff; margin-top: 14px;
+}
+.bf-summary.grade-A { background: linear-gradient(135deg,#2eb872,#36c99a); }
+.bf-summary.grade-B { background: linear-gradient(135deg,#5b8def,#6f7cf0); }
+.bf-summary.grade-C { background: linear-gradient(135deg,#e9a23b,#f0b95e); }
+.bf-grade {
+  font-size: 2.6rem; font-weight: 900; line-height: 1;
+  width: 64px; height: 64px; flex: 0 0 64px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,.22); border-radius: 16px;
+}
+.bf-summary-title { font-weight: 800; font-size: 1.02rem; margin-bottom: 4px; }
+.bf-summary-stats { display: flex; flex-wrap: wrap; gap: 10px; font-weight: 700; font-size: .95rem; }
+.bf-summary-msg { margin-top: 6px; font-size: .88rem; opacity: .95; }

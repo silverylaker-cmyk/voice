@@ -1,7 +1,7 @@
 // sw.js — 오프라인 지원 서비스워커
 // 전략: 같은 출처(앱 코드/HTML)는 "네트워크 우선" → 온라인이면 항상 최신,
 //       오프라인일 때만 캐시로 폴백. 이렇게 하면 배포 후 새 버전이 바로 반영된다.
-const CACHE = 'voice-analysis-v5';
+const CACHE = 'voice-analysis-v6';
 const ASSETS = [
   './',
   './index.html',
